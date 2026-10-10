@@ -57,7 +57,7 @@ export function dailyTasks(db: DB, user: User, now = new Date()): DailyTasks {
       description: "忘却曲線上で想起確率が目標値まで下がったカード。今やるのが最も効率的です",
       target: reviewedToday + remainingDue,
       done: reviewedToday,
-      modes: ["flashcard", "meaning", "cloze", "synonym", "antonym", "paraphrase"],
+      modes: ["flashcard", "meaning", "cloze", "listening", "synonym", "antonym", "paraphrase"],
     },
     {
       key: "new",

@@ -11,9 +11,3 @@ export function seedDatabase(db: DB) {
   const exprs = JSON.parse(readFileSync(resolve(DATA_DIR, "seed/expressions.json"), "utf8")) as SeedExpressionsFile;
   return { words: importSeedWords(db, words), expressionGroups: importSeedExpressions(db, exprs) };
 }
-
-/** 単語が 1 つもなければシードを投入 */
-export function seedIfEmpty(db: DB) {
-  const { n } = db.prepare("SELECT COUNT(*) AS n FROM words").get() as { n: number };
-  return n === 0 ? seedDatabase(db) : null;
-}

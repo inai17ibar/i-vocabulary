@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import type { LevelDef, User } from "@ivocab/shared";
 import { api } from "../api.ts";
+import { MicCheck } from "../components/Pronounce.tsx";
+import { type Accent, speak, sttSupported, ttsSupported, useSpeechPrefs } from "../speech.ts";
 
 export function Settings({ user, onChange, onLogout }: { user: User; onChange: (u: User) => void; onLogout: () => void }) {
   const [levels, setLevels] = useState<LevelDef[]>([]);
   const [saved, setSaved] = useState("");
+  const [prefs, setPrefs] = useSpeechPrefs();
   useEffect(() => { api.levels().then((r) => setLevels(r.levels)); }, []);
   const update = async (patch: Partial<User>) => {
     const r = await api.updateMe(patch);
@@ -33,6 +36,31 @@ export function Settings({ user, onChange, onLogout }: { user: User; onChange: (
           </p>
         )}
       </div>
+
+      <div className="card">
+        <h2>発音</h2>
+        {!ttsSupported() && <p className="error">このブラウザは読み上げに対応していません</p>}
+        <label>アクセント</label>
+        <div className="seg">
+          {(["en-US", "en-GB"] as Accent[]).map((a) => (
+            <button key={a} className={prefs.accent === a ? "on" : ""} onClick={() => { setPrefs({ ...prefs, accent: a }); speak("pronunciation"); }}>
+              {a === "en-US" ? "アメリカ英語" : "イギリス英語"}
+            </button>
+          ))}
+        </div>
+        <label>読み上げ速度 {prefs.rate.toFixed(2)}×</label>
+        <input type="range" min={0.6} max={1.2} step={0.05} value={prefs.rate} onChange={(e) => setPrefs({ ...prefs, rate: Number(e.target.value) })}
+          onPointerUp={() => speak("How are you doing today?")} />
+        <div className="switch-row">
+          <span>新しい単語を自動で読み上げる</span>
+          <input type="checkbox" checked={prefs.autoplay} onChange={(e) => setPrefs({ ...prefs, autoplay: e.target.checked })} />
+        </div>
+        <label>発音チェックのテスト</label>
+        {sttSupported() ? <MicCheck target="vocabulary" label="“vocabulary” と言ってみる" /> : (
+          <p className="muted">このブラウザは音声認識に対応していません（iPhone の Safari、Android / PC の Chrome で利用できます）</p>
+        )}
+      </div>
+
       <div className="card">
         <h2>目標保持率</h2>
         <p className="muted">復習時点で覚えていたい確率。高くすると復習回数が増え、低くすると減ります（推奨 90%）。</p>
@@ -48,7 +76,7 @@ export function Settings({ user, onChange, onLogout }: { user: User; onChange: (
         <p className="sub">{user.email} · タイムゾーン {user.timezone}</p>
         <button className="ghost" onClick={onLogout}>ログアウト</button>
       </div>
-      {saved && <p className="muted">{saved}</p>}
+      {saved && <p className="muted" role="status">{saved}</p>}
     </div>
   );
 }

@@ -28,7 +28,7 @@ export interface AppOptions {
   corsOrigins?: string[];
 }
 
-const QUIZ_MODES = ["flashcard", "meaning", "synonym", "antonym", "cloze", "paraphrase"] as const;
+const QUIZ_MODES = ["flashcard", "meaning", "synonym", "antonym", "cloze", "listening", "paraphrase"] as const;
 
 export async function buildApp(opts: AppOptions) {
   const { db } = opts;

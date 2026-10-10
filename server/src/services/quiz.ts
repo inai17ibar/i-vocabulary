@@ -109,6 +109,27 @@ export function relationQuestion(db: DB, cardId: number, w: Word, type: "synonym
   };
 }
 
+/** リスニング: 発音を聞いて単語を選ぶ。綴りが似た語を誤答にして「音と綴り」の結びつきを鍛える */
+export function listeningQuestion(db: DB, cardId: number, w: Word, rng: Rng): QuizQuestion | null {
+  if (w.lemma.includes(" ")) return null;
+  const similar = (
+    db.prepare("SELECT lemma FROM words WHERE id <> ? AND created_by IS NULL AND lemma NOT LIKE '% %' AND (substr(lemma, 1, 2) = substr(?, 1, 2) OR substr(lemma, -3) = substr(?, -3)) LIMIT 10").all(w.id, w.lemma, w.lemma) as { lemma: string }[]
+  ).map((r) => r.lemma);
+  const distractors = [...shuffle(similar, rng), ...distractorLemmas(db, w, [], 6, rng)];
+  if (distractors.length < 2) return null;
+  const { choices, answerIndex } = buildChoices({ text: w.lemma }, distractors.map((text) => ({ text })), rng);
+  return {
+    cardId,
+    mode: "listening",
+    prompt: w.lemma,
+    instruction: "音声を聞いて、聞こえた単語を選んでください",
+    choices,
+    answerIndex,
+    explanation: wordExplanation(w) + (w.ipa ? `\n発音記号: ${w.ipa}` : ""),
+    word: w,
+  };
+}
+
 export function clozeQuestion(db: DB, cardId: number, w: Word, rng: Rng): QuizQuestion | null {
   for (const ex of shuffle(w.examples, rng)) {
     const cloze = makeCloze(ex.en, w.lemma);
@@ -194,6 +215,7 @@ export function questionForCard(db: DB, card: CardRow, preferred: QuizMode[], rn
     else if (mode === "meaning") q = meaningQuestion(db, card.id, w, rng);
     else if (mode === "synonym" || mode === "antonym") q = relationQuestion(db, card.id, w, mode, rng);
     else if (mode === "cloze") q = clozeQuestion(db, card.id, w, rng);
+    else if (mode === "listening") q = listeningQuestion(db, card.id, w, rng);
     if (q) return q;
   }
   return null;
@@ -204,9 +226,9 @@ export function questionForCard(db: DB, card: CardRow, preferred: QuizMode[], rn
  * 文脈（穴埋め）や関係語（類義・対義）で「使える語彙」へ広げる。
  */
 export function reviewModesFor(card: CardRow, rng: Rng = Math.random): QuizMode[] {
-  if (card.state <= 1 || card.stability < 3) return shuffle<QuizMode>(["flashcard", "meaning"], rng);
-  if (card.stability < 14) return shuffle<QuizMode>(["meaning", "cloze", "synonym"], rng);
-  return shuffle<QuizMode>(["cloze", "synonym", "antonym", "flashcard"], rng);
+  if (card.state <= 1 || card.stability < 3) return shuffle<QuizMode>(["flashcard", "meaning", "listening"], rng);
+  if (card.stability < 14) return shuffle<QuizMode>(["meaning", "cloze", "synonym", "listening"], rng);
+  return shuffle<QuizMode>(["cloze", "synonym", "antonym", "flashcard", "listening"], rng);
 }
 
 /** 新出の表現グループを「覚える」ためのカード（自己評価） */

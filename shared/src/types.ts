@@ -20,6 +20,7 @@ export type QuizMode =
   | "synonym"     // 類義語を選ぶ
   | "antonym"     // 対義語を選ぶ
   | "cloze"       // 例文の穴埋め
+  | "listening"   // 音声を聞いて単語を選ぶ（prompt は読み上げ用。画面には出さない）
   | "paraphrase"; // 同じ意図の別の言い方を選ぶ
 
 export interface User {

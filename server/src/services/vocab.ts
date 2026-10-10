@@ -87,11 +87,13 @@ function relationsFor(db: DB, wordId: number, type: "synonym" | "antonym"): Rela
     lemma: string;
     note: string | null;
   }[];
-  // 関係は対称なので、他の単語側に登録された関係も拾う（メモは相手側の説明なので付けない）
+  // 関係は対称なので、他の単語側に登録された関係も拾う（メモは相手側の説明なので付けない）。
+  // 品詞が違う語は除外（solution(名詞) の類義語 answer を answer(動詞) 側に出さない）
   const reverse = db.prepare(
     `SELECT w.lemma AS lemma FROM word_relations r JOIN words w ON w.id = r.word_id
-     WHERE r.type = ? AND r.related_lemma = (SELECT lemma FROM words WHERE id = ?) ORDER BY r.id`,
-  ).all(type, wordId) as { lemma: string }[];
+     JOIN words self ON self.id = ?
+     WHERE r.type = ? AND r.related_lemma = self.lemma AND w.pos = self.pos ORDER BY r.id`,
+  ).all(wordId, type) as { lemma: string }[];
   const seen = new Set<string>();
   const out: Relation[] = [];
   for (const r of [...forward, ...reverse.map((x) => ({ lemma: x.lemma, note: null }))]) {
@@ -186,7 +188,7 @@ export function listExpressionGroups(db: DB): ExpressionGroup[] {
 /** data/seed の JSON 形式を取り込む */
 export interface SeedWordsFile {
   source: string;
-  words: { lemma: string; pos: string; cefr: Cefr; ja: string; def?: string; ex?: [string, string | null][]; syn?: string[]; ant?: string[] }[];
+  words: { lemma: string; pos: string; cefr: Cefr; ja: string; ipa?: string; def?: string; ex?: [string, string | null][]; syn?: string[]; ant?: string[] }[];
 }
 export interface SeedExpressionsFile {
   groups: { intentJa: string; intentEn: string; scene: string; cefr: Cefr; expressions: [string, Register, string | null, string | null][] }[];
@@ -206,6 +208,7 @@ export function importSeedWords(db: DB, file: SeedWordsFile): number {
         cefr: w.cefr,
         meaningJa: w.ja,
         definitionEn: w.def ?? null,
+        ipa: w.ipa ?? null,
         examples: (w.ex ?? []).map(([en, ja]) => ({ en, ja })),
         synonyms: (w.syn ?? []).map(parseRel),
         antonyms: (w.ant ?? []).map(parseRel),

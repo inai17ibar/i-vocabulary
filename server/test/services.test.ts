@@ -65,6 +65,10 @@ describe("importers", () => {
     const cold = upsertWord(db, { lemma: "cold", pos: "adj", cefr: "A1", source: "t" });
     expect(getWord(db, cold)!.antonyms.map((a) => a.lemma)).toEqual(["hot"]);
     expect(getWord(db, hot)!.antonyms[0].wordId).toBe(cold);
+    // 品詞が違う逆方向の関係は出さない
+    upsertWord(db, { lemma: "solution", pos: "noun", cefr: "B1", source: "t", synonyms: [{ lemma: "answer" }] });
+    const answerVerb = upsertWord(db, { lemma: "answer", pos: "verb", cefr: "A1", source: "t" });
+    expect(getWord(db, answerVerb)!.synonyms).toEqual([]);
   });
   it("enriches words from dictionary providers (mocked)", async () => {
     const db = openDb(":memory:");
@@ -111,5 +115,22 @@ describe("cambly corrections", () => {
       { original: "He don't like it", better: "He doesn't like it" },
       { original: "make a photo", better: "take a photo" },
     ]);
+  });
+});
+
+describe("listening quiz", () => {
+  it("asks to pick the spoken word among similar-looking words", async () => {
+    const { seedDatabase } = await import("../src/seed.ts");
+    const { listeningQuestion } = await import("../src/services/quiz.ts");
+    const db = openDb(":memory:");
+    seedDatabase(db);
+    const id = (db.prepare("SELECT id FROM words WHERE lemma = 'expand'").get() as { id: number }).id;
+    const w = getWord(db, id)!;
+    expect(w.ipa).toBe("/ɪkˈspænd/");
+    const q = listeningQuestion(db, 1, w, () => 0.3)!;
+    expect(q.mode).toBe("listening");
+    expect(q.choices[q.answerIndex].text).toBe("expand");
+    expect(new Set(q.choices.map((c) => c.text)).size).toBe(q.choices.length);
+    expect(q.choices.some((c) => c.text !== "expand" && (c.text.startsWith("ex") || c.text.endsWith("and")))).toBe(true);
   });
 });

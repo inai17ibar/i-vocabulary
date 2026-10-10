@@ -55,7 +55,9 @@ IELTS は採点基準 *Lexical Resource* が言い換え力を重視するので
 3. **オフライン学習。** `GET /study/session` の結果（正解インデックス込み）を端末に保存し、
    オフラインで回答 → `clientReviewId`(UUID) と `reviewedAt` を付けてキューに積み、
    オンライン復帰時に `POST /reviews/batch`。サーバーは冪等なので二重送信しても安全。
-4. **発音。** Web の `speechSynthesis` を `AVSpeechSynthesizer` に置き換え。
+4. **発音。** Web 版の `web/src/speech.ts` と同じ役割を、読み上げは `AVSpeechSynthesizer`、
+   発音チェックは `SFSpeechRecognizer`（`en-US` / `en-GB`）で実装。判定ロジック（認識候補のどれかに目標語が含まれれば OK）も同じにする。
+   リスニング問題 (`mode: "listening"`) は `prompt` を画面に出さず読み上げる。
 5. **通知。** `/tasks/today` の復習数をもとにローカル通知（復習の最適タイミング）。
 6. **Cambly 連携。** iOS の共有シート（Share Extension）で Cambly アプリ等からテキストを受け取り `/cambly/analyze` へ送る。
 

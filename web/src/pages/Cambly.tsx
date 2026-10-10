@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
 import type { CamblyLesson, LessonTarget, TranscriptAnalysis } from "@ivocab/shared";
 import { api, todayLocal } from "../api.ts";
+import { SpeakButtons } from "../components/Pronounce.tsx";
 
 export function Cambly() {
   const [section, setSection] = useState<"prep" | "after">("prep");
   return (
     <div>
-      <p className="sub">
-        Cambly のレッスンと連携します。<strong>レッスン前</strong>に使いたい語を決めてチャットに貼り、<strong>レッスン後</strong>に
-        使えた語へチェックし、チャットログや講師のメモから新しい語をカードにします。
-      </p>
-      <div className="row">
-        <button className={section === "prep" ? "btn" : "ghost"} onClick={() => setSection("prep")}>① レッスン前の準備・振り返り</button>
-        <button className={section === "after" ? "btn" : "ghost"} onClick={() => setSection("after")}>② チャットログから単語を追加</button>
+      <div className="seg">
+        <button className={section === "prep" ? "on" : ""} onClick={() => setSection("prep")}>レッスン前・中</button>
+        <button className={section === "after" ? "on" : ""} onClick={() => setSection("after")}>レッスン後</button>
       </div>
+      <p className="muted">
+        {section === "prep"
+          ? "使いたい語を決めて Cambly のチャットに貼り、レッスン中に使えたらチェック。"
+          : "チャットログや講師のメモを貼ると、訂正・単語・表現を拾ってカードにします。"}
+      </p>
       {section === "prep" ? <Prep /> : <AfterLesson />}
     </div>
   );
@@ -68,7 +70,7 @@ function Prep() {
             <label>講師名（任意）</label>
             <input value={tutor} onChange={(e) => setTutor(e.target.value)} />
             <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn" disabled={selected.size === 0} onClick={create}>レッスンを作成して練習リストを出力</button>
+              <button className="btn block" disabled={selected.size === 0} onClick={create}>レッスンを作成して練習リストを出力</button>
             </div>
           </>
         )}
@@ -91,7 +93,8 @@ function Prep() {
           {l.targets.map((t) => (
             <label className="check" key={t.cardId}>
               <input type="checkbox" checked={t.used} onChange={(e) => toggleUsed(l.id, t.cardId, e.target.checked)} />
-              <span>{t.headline}</span>
+              <span style={{ flex: 1 }}>{t.headline}</span>
+              {t.itemType === "word" && <SpeakButtons text={t.headline} compact />}
             </label>
           ))}
         </div>
@@ -142,7 +145,7 @@ function AfterLesson() {
       </p>
       <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={"Tutor: What did you do last weekend?\nI go to there -> I went there\n..."} />
       <div className="row" style={{ marginTop: 8 }}>
-        <button className="btn" disabled={!text.trim()} onClick={analyze}>解析する</button>
+        <button className="btn block" disabled={!text.trim()} onClick={analyze}>解析する</button>
       </div>
 
       {result && (
@@ -175,13 +178,13 @@ function AfterLesson() {
           <h3>辞書にない語の候補</h3>
           <p className="muted">覚えたい語に日本語の意味を入力すると、自分用の単語として追加されます。</p>
           {result.unknownCandidates.map((t) => (
-            <div className="row" key={t} style={{ flexWrap: "nowrap", margin: "4px 0" }}>
-              <span style={{ minWidth: 120 }}>{t}</span>
+            <div className="row" key={t} style={{ flexWrap: "nowrap", margin: "6px 0" }}>
+              <span style={{ width: 110, flex: "none", overflowWrap: "anywhere" }}>{t}</span>
               <input placeholder="意味（任意）" value={custom[t] ?? ""} onChange={(e) => setCustom({ ...custom, [t]: e.target.value })} />
             </div>
           ))}
           <div className="row" style={{ marginTop: 12 }}>
-            <button className="btn" onClick={save}>選択した項目を学習に追加</button>
+            <button className="btn block" onClick={save}>選択した項目を学習に追加</button>
             {message && <span className="sub">{message}</span>}
           </div>
         </>
