@@ -168,7 +168,7 @@ function AfterLesson() {
           {result.expressions.map((e) => (
             <label className="check" key={e.groupId + e.text}>
               <input type="checkbox" disabled={e.hasCard} checked={groupIds.has(e.groupId)} onChange={(ev) => toggle(groupIds, setGroupIds, e.groupId, ev.target.checked)} />
-              <span>{e.text}</span> <span className="muted">（{e.intentJa}）</span>
+              <span>{e.text}</span> <span className="muted">（{e.intentJa}）</span> {e.hasCard && <span className="muted">学習中</span>}
             </label>
           ))}
 
