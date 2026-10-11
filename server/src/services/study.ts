@@ -116,7 +116,9 @@ export function buildSession(db: DB, user: User, task: TaskKey, opts: { limit?: 
   const push = (q: QuizQuestion | null) => q && questions.push(q);
 
   if (task === "review") {
-    const cards = dueCards(db, user, now, opts.limit ?? 30);
+    // ダッシュボードと同じく「今日中（ユーザーのタイムゾーン）に期限が来るカード」を対象にする。
+    // 数分後の学習ステップも先取りで出題する（1 日単位で復習する運用に合わせる）
+    const cards = dueCards(db, user, endOfLocalDay(now, user.timezone), opts.limit ?? 30);
     for (const c of cards) push(questionForCard(db, c, reviewModesFor(c, rng), rng));
   } else if (task === "new") {
     const wordsLeft = Math.max(0, level.plan.newWords - introducedToday(db, user, "word", now));

@@ -127,7 +127,34 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (lesson_id, card_id)
   );
   `,
+  // v2: 単語の一意性を「所有者ごと」にする。ユーザー追加語（Cambly の訂正など）が
+  // 共有語や他ユーザーの語と同じ (lemma, pos) でも衝突・上書きしないように。
+  // SQLite はテーブル制約を変更できないので作り直す（外部キーは一時的に無効化）
+  `
+  CREATE TABLE words_new (
+    id INTEGER PRIMARY KEY,
+    lemma TEXT NOT NULL,
+    pos TEXT NOT NULL,
+    cefr TEXT NOT NULL,
+    meaning_ja TEXT NOT NULL DEFAULT '',
+    definition_en TEXT,
+    ipa TEXT,
+    frequency_rank INTEGER,
+    source TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    enriched_at TEXT
+  );
+  INSERT INTO words_new SELECT id, lemma, pos, cefr, meaning_ja, definition_en, ipa, frequency_rank, source, created_by, enriched_at FROM words;
+  DROP TABLE words;
+  ALTER TABLE words_new RENAME TO words;
+  CREATE INDEX words_cefr ON words(cefr);
+  CREATE INDEX words_lemma ON words(lemma);
+  CREATE UNIQUE INDEX words_lemma_pos_owner ON words(lemma, pos, IFNULL(created_by, 0));
+  `,
 ];
+
+/** テーブルを作り直すマイグレーション（外部キー無効化が必要なもの） */
+const REBUILD_MIGRATIONS = new Set([1]);
 
 export function openDb(path: string): DB {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -143,10 +170,21 @@ function migrate(db: DB) {
   let version = row?.version ?? 0;
   if (!row) db.prepare("INSERT INTO schema_version (version) VALUES (0)").run();
   while (version < MIGRATIONS.length) {
-    tx(db, () => {
-      db.exec(MIGRATIONS[version]);
-      db.prepare("UPDATE schema_version SET version = ?").run(version + 1);
-    });
+    // PRAGMA foreign_keys はトランザクション外でしか切り替えられない
+    const rebuild = REBUILD_MIGRATIONS.has(version);
+    if (rebuild) db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      tx(db, () => {
+        db.exec(MIGRATIONS[version]);
+        if (rebuild) {
+          const broken = db.prepare("PRAGMA foreign_key_check").all();
+          if (broken.length) throw new Error(`migration ${version + 1} left ${broken.length} broken foreign keys`);
+        }
+        db.prepare("UPDATE schema_version SET version = ?").run(version + 1);
+      });
+    } finally {
+      if (rebuild) db.exec("PRAGMA foreign_keys = ON");
+    }
     version++;
   }
 }

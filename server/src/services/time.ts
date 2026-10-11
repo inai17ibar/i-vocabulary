@@ -13,15 +13,19 @@ export function addDays(isoDate: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** ユーザーのタイムゾーンで「今日の終わり」(= 明日 0:00) の UTC 時刻 */
+/**
+ * ユーザーのタイムゾーンで「今日の終わり」(= 翌日 0:00) の UTC 時刻。
+ * 日付が変わる瞬間を二分探索で求めるので、+5:30 や +5:45 のような分単位のオフセットや DST にも対応する。
+ */
 export function endOfLocalDay(now: Date, timezone: string): Date {
-  // 1時間刻みで日付が変わる時刻を探す（DST にも対応できる簡易実装）
   const today = localDate(now, timezone);
-  const t = new Date(now);
-  t.setUTCMinutes(0, 0, 0);
-  for (let i = 0; i < 26; i++) {
-    t.setUTCHours(t.getUTCHours() + 1);
-    if (localDate(t, timezone) !== today) return t;
+  let lo = now.getTime(); // まだ今日
+  let hi = lo + 26 * 3600_000; // 確実に明日以降
+  while (hi - lo > 60_000) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (localDate(new Date(mid), timezone) === today) lo = mid;
+    else hi = mid;
   }
-  return t;
+  // 境界 b は lo < b <= hi かつ分単位。hi - lo <= 1 分なので、hi を分に切り捨てると b に一致する
+  return new Date(Math.floor(hi / 60_000) * 60_000);
 }

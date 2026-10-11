@@ -6,7 +6,7 @@ import { ensureCard, headlineFor, NotFoundError, recordReview } from "./cards.ts
 import type { CardRow } from "./srs.ts";
 import { retrievability } from "./srs.ts";
 import { expressionFragments, inflections, normalizeForMatch, STOPWORDS, tokenize } from "./text.ts";
-import { upsertWord } from "./vocab.ts";
+import { canSeeWord, upsertWord } from "./vocab.ts";
 
 /**
  * Cambly 連携。
@@ -98,8 +98,14 @@ export function addFromLesson(db: DB, user: User, input: AddFromLessonInput): Ca
   const level = getLevel(user.levelId);
   return tx(db, () => {
     const cards: CardRow[] = [];
-    for (const id of input.wordIds ?? []) cards.push(ensureCard(db, user.id, "word", id, "cambly"));
-    for (const id of input.groupIds ?? []) cards.push(ensureCard(db, user.id, "expression", id, "cambly"));
+    for (const id of input.wordIds ?? []) {
+      if (!canSeeWord(db, id, user.id)) throw new NotFoundError(`word ${id} not found`);
+      cards.push(ensureCard(db, user.id, "word", id, "cambly"));
+    }
+    for (const id of input.groupIds ?? []) {
+      if (!db.prepare("SELECT 1 FROM expression_groups WHERE id = ?").get(id)) throw new NotFoundError(`expression group ${id} not found`);
+      cards.push(ensureCard(db, user.id, "expression", id, "cambly"));
+    }
     for (const w of input.customWords ?? []) {
       if (!w.lemma.trim()) continue;
       const id = upsertWord(db, {

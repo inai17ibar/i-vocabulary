@@ -39,6 +39,11 @@ describe("time", () => {
     const now = new Date("2026-10-10T16:30:00Z"); // JST 01:30 on 10/11
     expect(localDate(now, "Asia/Tokyo")).toBe("2026-10-11");
     expect(endOfLocalDay(now, "Asia/Tokyo").toISOString()).toBe("2026-10-11T15:00:00.000Z");
+    // 分単位のオフセット（インド +5:30 / ネパール +5:45）
+    expect(endOfLocalDay(new Date("2026-10-10T10:00:00Z"), "Asia/Kolkata").toISOString()).toBe("2026-10-10T18:30:00.000Z");
+    expect(endOfLocalDay(new Date("2026-10-10T10:00:00Z"), "Asia/Kathmandu").toISOString()).toBe("2026-10-10T18:15:00.000Z");
+    // DST 切替日（米国東部 2026-11-01 は 25 時間）
+    expect(endOfLocalDay(new Date("2026-11-01T12:00:00Z"), "America/New_York").toISOString()).toBe("2026-11-02T05:00:00.000Z");
   });
 });
 
@@ -132,5 +137,29 @@ describe("listening quiz", () => {
     expect(q.choices[q.answerIndex].text).toBe("expand");
     expect(new Set(q.choices.map((c) => c.text)).size).toBe(q.choices.length);
     expect(q.choices.some((c) => c.text !== "expand" && (c.text.startsWith("ex") || c.text.endsWith("and")))).toBe(true);
+  });
+});
+
+describe("migration v2", () => {
+  it("rebuilds the words table without losing rows or child records", async () => {
+    const { DatabaseSync } = await import("node:sqlite");
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const path = join(mkdtempSync(join(tmpdir(), "ivocab-")), "v1.db");
+    // v1 スキーマの DB を作る（v2 の直前の状態）
+    const v1 = openDb(path);
+    upsertWord(v1, { lemma: "brave", pos: "adj", cefr: "B1", source: "t", examples: [{ en: "a brave act", ja: null }], synonyms: [{ lemma: "bold" }] });
+    v1.close();
+    const raw = new DatabaseSync(path);
+    expect((raw.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(2);
+    raw.exec("UPDATE schema_version SET version = 1");
+    raw.exec("DROP INDEX words_lemma_pos_owner; DROP INDEX words_lemma");
+    raw.close();
+    const db = openDb(path);
+    const w = getWord(db, 1)!;
+    expect(w.examples).toHaveLength(1);
+    expect(w.synonyms.map((s) => s.lemma)).toEqual(["bold"]);
+    expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
   });
 });

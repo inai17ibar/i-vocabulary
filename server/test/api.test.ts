@@ -195,3 +195,54 @@ Tutor: Your pronunciation is improving remarkably.`;
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe("user-owned words", () => {
+  async function twoUsers() {
+    const one = await setup();
+    const reg = await one.app.inject({ method: "POST", url: "/api/v1/auth/register", payload: { email: "b@example.com", password: "password123" } });
+    const tokenB = reg.json().token;
+    const callB = async (method: "GET" | "POST", url: string, payload?: unknown) => {
+      const res = await one.app.inject({ method, url: `/api/v1${url}`, payload: payload as object, headers: { authorization: `Bearer ${tokenB}` } });
+      return { status: res.statusCode, body: res.json() };
+    };
+    return { ...one, callB };
+  }
+
+  it("hides other users' custom words from ID lookups and card creation", async () => {
+    const { call, callB } = await twoUsers();
+    const added = await call("POST", "/cambly/cards", { corrections: [{ original: "I go there", better: "I went there" }] });
+    const wordId = added.body.cards[0].itemId;
+    expect((await call("GET", `/words/${wordId}`)).status).toBe(200);
+    expect((await callB("GET", `/words/${wordId}`)).status).toBe(404);
+    expect((await callB("POST", "/cards", { itemType: "word", itemId: wordId })).status).toBe(404);
+    expect((await callB("POST", "/cambly/cards", { wordIds: [wordId] })).status).toBe(404);
+  });
+
+  it("keeps the same custom word separate per user and never overwrites shared words", async () => {
+    const { db, call, callB } = await twoUsers();
+    const a = await call("POST", "/cambly/cards", { corrections: [{ original: "I go there", better: "I went there" }] });
+    const b = await callB("POST", "/cambly/cards", { corrections: [{ original: "I goed there", better: "I went there" }] });
+    expect(a.body.cards[0].itemId).not.toBe(b.body.cards[0].itemId);
+    expect((await call("GET", `/words/${a.body.cards[0].itemId}`)).body.word.meaningJa).toBe("✗ I go there");
+
+    // 共有の seed 語と同じ lemma/pos を追加しても seed 側は変わらない
+    const seed = db.prepare("SELECT id, meaning_ja FROM words WHERE lemma = 'essential' AND created_by IS NULL").get() as { id: number; meaning_ja: string };
+    const custom = await callB("POST", "/cambly/cards", { customWords: [{ lemma: "essential", meaningJa: "上書きテスト", pos: "adj" }] });
+    expect(custom.body.cards[0].itemId).not.toBe(seed.id);
+    expect((await call("GET", `/words/${seed.id}`)).body.word.meaningJa).toBe(seed.meaning_ja);
+  });
+});
+
+describe("review session cutoff", () => {
+  it("serves every card the dashboard counts as due today", async () => {
+    const { call } = await setup();
+    const s = (await call("GET", "/study/session?task=new")).body as StudySession;
+    // Good → 学習ステップ（数分後）に入る
+    await call("POST", "/reviews", { cardId: s.questions[0].cardId, grade: 3, mode: "flashcard" });
+    const tasks = (await call("GET", "/tasks/today")).body as DailyTasks;
+    const review = tasks.tasks.find((t) => t.key === "review")!;
+    expect(review.target - review.done).toBe(1);
+    const session = (await call("GET", "/study/session?task=review")).body as StudySession;
+    expect(session.questions.map((q) => q.cardId)).toEqual([s.questions[0].cardId]);
+  });
+});

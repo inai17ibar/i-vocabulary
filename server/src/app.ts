@@ -12,7 +12,7 @@ import { addFromLesson, analyzeTranscript, createLesson, getLesson, listLessons,
 import { gradeFromQuiz } from "./services/srs.ts";
 import { computeStats } from "./services/stats.ts";
 import { buildSession, dailyTasks, TASK_KEYS } from "./services/study.ts";
-import { getExpressionGroup, getWord, listExpressionGroups, searchWords } from "./services/vocab.ts";
+import { canSeeWord, getExpressionGroup, getWord, listExpressionGroups, searchWords } from "./services/vocab.ts";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -105,7 +105,7 @@ export async function buildApp(opts: AppOptions) {
         });
         authed.get("/words/:id", async (req) => {
           const { id } = idParam.parse(req.params);
-          const w = getWord(db, id);
+          const w = canSeeWord(db, id, req.user.id) ? getWord(db, id) : null;
           if (!w) throw new NotFoundError("word not found");
           return { word: w };
         });
@@ -128,7 +128,7 @@ export async function buildApp(opts: AppOptions) {
         });
         authed.post("/cards", async (req) => {
           const body = z.object({ itemType: z.enum(["word", "expression"]), itemId: z.number().int().positive() }).parse(req.body);
-          const exists = body.itemType === "word" ? getWord(db, body.itemId) : getExpressionGroup(db, body.itemId);
+          const exists = body.itemType === "word" ? canSeeWord(db, body.itemId, req.user.id) : getExpressionGroup(db, body.itemId);
           if (!exists) throw new NotFoundError("item not found");
           const row = ensureCard(db, req.user.id, body.itemType, body.itemId, "manual");
           return { card: toCardDto(db, row, new Date(), req.user.desiredRetention) };

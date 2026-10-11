@@ -52,16 +52,27 @@ export function upsertWord(db: DB, w: WordInput): number {
   const pos = normalizePos(w.pos);
   if (!lemma) throw new Error("lemma is required");
   if (!isCefr(w.cefr)) throw new Error(`invalid CEFR level: ${w.cefr}`);
-  db.prepare(
-    `INSERT INTO words (lemma, pos, cefr, meaning_ja, definition_en, ipa, frequency_rank, source, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (lemma, pos) DO UPDATE SET
-       meaning_ja = CASE WHEN excluded.meaning_ja <> '' THEN excluded.meaning_ja ELSE words.meaning_ja END,
-       definition_en = COALESCE(excluded.definition_en, words.definition_en),
-       ipa = COALESCE(excluded.ipa, words.ipa),
-       frequency_rank = COALESCE(excluded.frequency_rank, words.frequency_rank)`,
-  ).run(lemma, pos, w.cefr, w.meaningJa ?? "", w.definitionEn ?? null, w.ipa ?? null, w.frequencyRank ?? null, w.source, w.createdBy ?? null);
-  const { id } = db.prepare("SELECT id FROM words WHERE lemma = ? AND pos = ?").get(lemma, pos) as { id: number };
+  // 一意性は所有者ごと: 共有語（created_by NULL）と各ユーザーの語は別の行になり、互いに上書きしない
+  const owner = w.createdBy ?? null;
+  const existing = db.prepare("SELECT id FROM words WHERE lemma = ? AND pos = ? AND created_by IS ?").get(lemma, pos, owner) as { id: number } | undefined;
+  let id: number;
+  if (existing) {
+    id = existing.id;
+    db.prepare(
+      `UPDATE words SET
+         meaning_ja = CASE WHEN ? <> '' THEN ? ELSE meaning_ja END,
+         definition_en = COALESCE(?, definition_en),
+         ipa = COALESCE(?, ipa),
+         frequency_rank = COALESCE(?, frequency_rank)
+       WHERE id = ?`,
+    ).run(w.meaningJa ?? "", w.meaningJa ?? "", w.definitionEn ?? null, w.ipa ?? null, w.frequencyRank ?? null, id);
+  } else {
+    const r = db.prepare(
+      `INSERT INTO words (lemma, pos, cefr, meaning_ja, definition_en, ipa, frequency_rank, source, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(lemma, pos, w.cefr, w.meaningJa ?? "", w.definitionEn ?? null, w.ipa ?? null, w.frequencyRank ?? null, w.source, owner);
+    id = Number(r.lastInsertRowid);
+  }
   for (const ex of w.examples ?? []) addExample(db, id, ex);
   for (const s of w.synonyms ?? []) addRelation(db, id, "synonym", s.lemma, s.note ?? null, w.source);
   for (const a of w.antonyms ?? []) addRelation(db, id, "antonym", a.lemma, a.note ?? null, w.source);
@@ -81,8 +92,9 @@ export function addRelation(db: DB, wordId: number, type: "synonym" | "antonym",
 }
 
 function relationsFor(db: DB, wordId: number, type: "synonym" | "antonym"): Relation[] {
+  // 関連語のリンク先は共有語のみ（他ユーザーの追加語の ID を露出させない）
   const lemmaId = (lemma: string) =>
-    (db.prepare("SELECT id FROM words WHERE lemma = ? ORDER BY id LIMIT 1").get(lemma) as { id: number } | undefined)?.id ?? null;
+    (db.prepare("SELECT id FROM words WHERE lemma = ? AND created_by IS NULL ORDER BY id LIMIT 1").get(lemma) as { id: number } | undefined)?.id ?? null;
   const forward = db.prepare("SELECT related_lemma AS lemma, note FROM word_relations WHERE word_id = ? AND type = ? ORDER BY id").all(wordId, type) as {
     lemma: string;
     note: string | null;
@@ -92,7 +104,8 @@ function relationsFor(db: DB, wordId: number, type: "synonym" | "antonym"): Rela
   const reverse = db.prepare(
     `SELECT w.lemma AS lemma FROM word_relations r JOIN words w ON w.id = r.word_id
      JOIN words self ON self.id = ?
-     WHERE r.type = ? AND r.related_lemma = self.lemma AND w.pos = self.pos ORDER BY r.id`,
+     WHERE r.type = ? AND r.related_lemma = self.lemma AND w.pos = self.pos
+       AND (w.created_by IS NULL OR w.created_by IS self.created_by) ORDER BY r.id`,
   ).all(wordId, type) as { lemma: string }[];
   const seen = new Set<string>();
   const out: Relation[] = [];
@@ -103,6 +116,11 @@ function relationsFor(db: DB, wordId: number, type: "synonym" | "antonym"): Rela
     out.push({ type, lemma: r.lemma, wordId: lemmaId(r.lemma), note: r.note });
   }
   return out;
+}
+
+/** 共有語、または本人が追加した語なら見える */
+export function canSeeWord(db: DB, id: number, userId: number): boolean {
+  return !!db.prepare("SELECT 1 FROM words WHERE id = ? AND (created_by IS NULL OR created_by = ?)").get(id, userId);
 }
 
 export function getWord(db: DB, id: number): Word | null {
