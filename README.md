@@ -33,6 +33,16 @@ npm run dev          # API :8787 + Web :5173（/api はプロキシ）
 npm run build && npm start   # → http://localhost:8787
 ```
 
+iOS アプリ（Capacitor で Web UI を包んだネイティブアプリ。Xcode が必要）:
+
+```bash
+npm start                      # API サーバーを起動しておく
+npm run ios -w web             # Web をビルド → ios/ に同期 → シミュレーターで起動
+npm run ios:open -w web        # Xcode で開く（実機ビルド・署名はここで）
+```
+
+API の接続先は `web/.env.ios` の `VITE_API_BASE`（既定 `http://localhost:8787/api/v1`。実機では Mac の LAN IP などに変更）。
+
 | コマンド | 内容 |
 |---|---|
 | `npm test` | shared / server のテスト（vitest） |

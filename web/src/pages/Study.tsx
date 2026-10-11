@@ -17,6 +17,9 @@ const GRADES: { g: Grade; label: string; sub: string }[] = [
 ];
 const REGISTER_JA = { casual: "カジュアル", neutral: "標準", formal: "フォーマル" } as const;
 
+/** ボタンが別のボタンに切り替わった直後のタップを無視する時間（連打で隣の評価を押してしまうのを防ぐ） */
+const TAP_GUARD_MS = 400;
+
 function formatInterval(days: number): string {
   if (days < 1 / 24) return `${Math.max(1, Math.round(days * 1440))}分後`;
   if (days < 1) return `${Math.round(days * 24)}時間後`;
@@ -53,10 +56,15 @@ export function Study({ task, onExit }: { task: string; onExit: () => void }) {
   const [picked, setPicked] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [last, setLast] = useState<ReviewResult | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  /** フラッシュカードで選んだ評価（回答済みかどうかの判定にも使う） */
+  const [graded, setGraded] = useState<Grade | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [error, setError] = useState("");
   const startedAt = useRef(Date.now());
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const guardUntil = useRef(0);
+  const guarded = () => Date.now() < guardUntil.current;
+  const armGuard = () => { guardUntil.current = Date.now() + TAP_GUARD_MS; };
 
   useEffect(() => {
     api.session(task).then((s) => setQuestions(s.questions)).catch((e) => setError(e.message));
@@ -66,39 +74,60 @@ export function Study({ task, onExit }: { task: string; onExit: () => void }) {
   // 出題時の自動再生: リスニングは必須、単語カードは設定で
   useEffect(() => {
     startedAt.current = Date.now();
+    // 前の問題でスクロールした位置のまま次の問題が始まらないよう先頭に戻す
+    bodyRef.current?.scrollTo({ top: 0 });
     if (!q) return;
     if (q.mode === "listening") speak(q.prompt);
     else if (prefs.autoplay && q.mode === "flashcard" && q.word) speak(q.word.lemma);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
+  // 記録の完了を待たずに次の問題へ進めるので、応答が返った時点で同じ問題を表示中のときだけ反映する
+  const shownCard = useRef<number | null>(null);
+  shownCard.current = q?.cardId ?? null;
+
   const submit = useCallback(async (body: { grade?: Grade; correct?: boolean }) => {
     if (!q) return;
-    setSubmitting(true);
     try {
       const r = await api.review({
         cardId: q.cardId, mode: q.mode, durationMs: Date.now() - startedAt.current,
         clientReviewId: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, ...body,
       });
-      setLast(r);
-      if (body.correct || (body.grade && body.grade > 1)) setCorrectCount((c) => c + 1);
+      if (shownCard.current === q.cardId) setLast(r);
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setSubmitting(false);
     }
   }, [q]);
 
   const next = useCallback(() => {
+    if (guarded()) return;
+    armGuard();
     setPicked(null);
     setRevealed(false);
+    setGraded(null);
     setLast(null);
     setI((n) => n + 1);
   }, []);
 
+  const reveal = useCallback(() => {
+    if (guarded()) return;
+    armGuard();
+    setRevealed(true);
+  }, []);
+
+  const grade = useCallback((g: Grade) => {
+    if (graded !== null || guarded()) return;
+    armGuard();
+    setGraded(g);
+    if (g > 1) setCorrectCount((c) => c + 1);
+    submit({ grade: g });
+  }, [graded, submit]);
+
   const choose = useCallback((idx: number) => {
     if (!q || picked !== null) return;
+    armGuard();
     setPicked(idx);
+    if (idx === q.answerIndex) setCorrectCount((c) => c + 1);
     submit({ correct: idx === q.answerIndex });
     if (q.mode !== "listening" && q.choices[idx] && !q.group) speak(q.choices[q.answerIndex].text);
   }, [q, picked, submit]);
@@ -108,16 +137,17 @@ export function Study({ task, onExit }: { task: string; onExit: () => void }) {
     const onKey = (e: KeyboardEvent) => {
       if (!q || (e.target as HTMLElement).tagName === "INPUT") return;
       const n = Number(e.key);
+      const enter = e.key === " " || e.key === "Enter";
       if (q.mode === "flashcard") {
-        if (!revealed && (e.key === " " || e.key === "Enter")) { e.preventDefault(); setRevealed(true); }
-        else if (revealed && !last && n >= 1 && n <= 4) submit({ grade: n as Grade });
-        else if (last && (e.key === " " || e.key === "Enter")) { e.preventDefault(); next(); }
+        if (!revealed && enter) { e.preventDefault(); reveal(); }
+        else if (revealed && graded === null && n >= 1 && n <= 4) grade(n as Grade);
+        else if (graded !== null && enter) { e.preventDefault(); next(); }
       } else if (picked === null && n >= 1 && n <= q.choices.length) choose(n - 1);
-      else if (last && (e.key === " " || e.key === "Enter")) { e.preventDefault(); next(); }
+      else if (picked !== null && enter) { e.preventDefault(); next(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [q, revealed, last, picked, submit, next, choose]);
+  }, [q, revealed, graded, picked, reveal, grade, next, choose]);
 
   const shell = (body: React.ReactNode, actions?: React.ReactNode) => (
     <div className="study">
@@ -126,7 +156,7 @@ export function Study({ task, onExit }: { task: string; onExit: () => void }) {
         <div className="progress"><div style={{ width: `${questions?.length ? (i / questions.length) * 100 : 0}%` }} /></div>
         <span className="muted" style={{ fontVariantNumeric: "tabular-nums" }}>{questions ? `${Math.min(i + 1, questions.length)}/${questions.length}` : ""}</span>
       </div>
-      <div className="study-body">{body}</div>
+      <div className="study-body" ref={bodyRef}>{body}</div>
       {actions && <div className="study-actions">{actions}</div>}
     </div>
   );
@@ -146,31 +176,47 @@ export function Study({ task, onExit }: { task: string; onExit: () => void }) {
     );
   }
 
-  const answered = q.mode === "flashcard" ? last !== null : picked !== null;
+  const answered = q.mode === "flashcard" ? graded !== null : picked !== null;
   const isListening = q.mode === "listening";
   const showWordAudio = q.word && !isListening && (q.mode === "flashcard" || q.mode === "synonym" || q.mode === "antonym");
-  const nextBar = (
-    <div className="row" style={{ flexWrap: "nowrap" }}>
-      <span className="muted" style={{ flex: 1 }}>{last ? `次の復習: ${formatInterval(last.intervalDays)}` : "記録中…"}</span>
-      <button className="btn" style={{ minWidth: 140 }} onClick={next} disabled={!last}>次へ</button>
+  const isLastQuestion = i === questions.length - 1;
+
+  // 回答後のフィードバック: 結果をはっきり示し、「次へ」は押すまで進まないことがわかるようにする
+  const correct = q.mode === "flashcard" ? (graded ?? 0) > 1 : picked === q.answerIndex;
+  const verdict = q.mode === "flashcard"
+    ? (correct ? `記録しました（${GRADES.find((g) => g.g === graded)?.label}）` : "もう一度覚え直しましょう")
+    : (correct ? "正解！" : `不正解 — 正解は「${q.choices[q.answerIndex]?.text}」`);
+  const feedbackBar = (
+    <div className={`feedback ${correct ? "ok" : "ng"}`} role="status">
+      <div className="verdict">
+        <span className="mark" aria-hidden="true">{correct ? "✓" : "✗"}</span>
+        <div>
+          <strong>{verdict}</strong>
+          <small>{last ? `この${q.group ? "表現" : "単語"}は ${formatInterval(last.intervalDays)}にまた出題されます` : "記録中…"}</small>
+        </div>
+      </div>
+      <button className="btn block" onClick={next}>{isLastQuestion ? "結果を見る" : "次の問題へ →"}</button>
     </div>
   );
 
   let actions: React.ReactNode = null;
   if (q.mode === "flashcard") {
-    if (!revealed) actions = <button className="btn block" onClick={() => setRevealed(true)}>答えを見る</button>;
-    else if (!last) actions = (
-      <div className="grades">
-        {GRADES.map((g) => (
-          <button key={g.g} className={`g${g.g}`} disabled={submitting} onClick={() => submit({ grade: g.g })}>{g.label}<small>{g.sub}</small></button>
-        ))}
-      </div>
+    if (!revealed) actions = <button className="btn block" onClick={reveal}>答えを見る</button>;
+    else if (graded === null) actions = (
+      <>
+        <div className="actions-label">どれくらい覚えていましたか？</div>
+        <div className="grades">
+          {GRADES.map((g) => (
+            <button key={g.g} className={`g${g.g}`} onClick={() => grade(g.g)}>{g.label}<small>{g.sub}</small></button>
+          ))}
+        </div>
+      </>
     );
-    else actions = nextBar;
-  } else if (answered) actions = nextBar;
+    else actions = feedbackBar;
+  } else if (answered) actions = feedbackBar;
 
   const body = (
-    <>
+    <div className="question" key={i}>
       {q.word && (
         <div className="row center" style={{ marginTop: 4 }}>
           <span className="tag">{q.word.pos}</span>
@@ -240,7 +286,7 @@ export function Study({ task, onExit }: { task: string; onExit: () => void }) {
           )}
         </>
       )}
-    </>
+    </div>
   );
 
   return shell(body, actions);

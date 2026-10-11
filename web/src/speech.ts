@@ -42,26 +42,59 @@ export function useSpeechPrefs(): [SpeechPrefs, (p: SpeechPrefs) => void] {
 
 export const ttsSupported = () => typeof window !== "undefined" && "speechSynthesis" in window;
 
+/**
+ * Apple 端末の声リストに入っているネタ用・旧式の声。名前順で先頭に来る（Albert, Bad News…）ので
+ * 除外しないとロボット声や効果音で読み上げてしまう。Eloquence 系（Eddy, Flo…）も発音が粗いので避ける
+ */
+const NOVELTY_VOICE = /^(albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|kathy|ralph|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley)\b/i;
+/** 高品質な声の目印（ダウンロード版の高音質・Siri・クラウド音声） */
+const HIGH_QUALITY = /premium|enhanced|siri|natural|neural|google|online/i;
+/** 定評のある標準の声 */
+const GOOD_NAMES: Record<Accent, RegExp> = {
+  "en-US": /^(samantha|ava|allison|susan|zoe|nicky|evan|tom|alex|aaron|nathan|joelle|noelle)\b/i,
+  "en-GB": /^(daniel|kate|serena|arthur|martha|oliver|stephanie|jamie)\b/i,
+};
+
 /** 指定アクセントの声。ブラウザの声リストは非同期に読み込まれるので毎回引く */
-function pickVoice(accent: Accent): SpeechSynthesisVoice | undefined {
-  const voices = window.speechSynthesis.getVoices();
-  const exact = voices.filter((v) => v.lang.replace("_", "-") === accent);
-  // 高品質な声（Siri / Google / Enhanced）を優先
-  return exact.find((v) => /siri|google|enhanced|premium|natural/i.test(v.name)) ?? exact[0] ?? voices.find((v) => v.lang.startsWith("en"));
+export function pickVoice(voices: SpeechSynthesisVoice[], accent: Accent): SpeechSynthesisVoice | undefined {
+  const usable = voices.filter((v) => !NOVELTY_VOICE.test(v.name));
+  const exact = usable.filter((v) => v.lang.replace("_", "-") === accent);
+  return exact.find((v) => HIGH_QUALITY.test(v.name))
+    ?? exact.find((v) => GOOD_NAMES[accent].test(v.name))
+    ?? exact.find((v) => v.default)
+    ?? exact[0]
+    ?? usable.find((v) => v.lang.startsWith("en"));
 }
+
+// Chrome は speak() 中の utterance が GC されると途中で止まるので参照を持っておく
+let current: SpeechSynthesisUtterance | null = null;
+let pending: ReturnType<typeof setTimeout> | undefined;
 
 export function speak(text: string, opts: { slow?: boolean; onEnd?: () => void } = {}) {
   if (!ttsSupported()) return;
   const prefs = loadPrefs();
   const synth = window.speechSynthesis;
-  synth.cancel();
   const u = new SpeechSynthesisUtterance(text.replace(/\.\.\.|…/g, ", ").replace(/_{3,}/g, "blank"));
   u.lang = prefs.accent;
-  const voice = pickVoice(prefs.accent);
+  const voice = pickVoice(synth.getVoices(), prefs.accent);
   if (voice) u.voice = voice;
   u.rate = opts.slow ? Math.max(0.5, prefs.rate * 0.6) : prefs.rate;
-  if (opts.onEnd) u.onend = opts.onEnd;
-  synth.speak(u);
+  u.onend = () => { if (current === u) current = null; opts.onEnd?.(); };
+  current = u;
+  clearTimeout(pending);
+  // Safari / iOS は cancel() 直後の speak() で冒頭が欠けたり音が乱れたりするので、再生中だけ止めて少し待つ
+  if (synth.speaking || synth.pending) {
+    synth.cancel();
+    pending = setTimeout(() => synth.speak(u), 120);
+  } else {
+    synth.speak(u);
+  }
+}
+
+// 声リストは初回 getVoices() では空のことがあるので、読み込みを先に促しておく
+if (ttsSupported()) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.addEventListener?.("voiceschanged", () => window.speechSynthesis.getVoices());
 }
 
 // ---- 発音チェック（音声認識） -------------------------------------------

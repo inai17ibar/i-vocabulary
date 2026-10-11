@@ -34,7 +34,7 @@ export async function buildApp(opts: AppOptions) {
   const { db } = opts;
   const app = Fastify({ logger: opts.logger ?? false });
   // iOS アプリはネイティブ HTTP なので CORS 不要。Web の別オリジン開発用に許可
-  await app.register(cors, { origin: opts.corsOrigins ?? true });
+  await app.register(cors, { origin: opts.corsOrigins ?? true, methods: ["GET", "HEAD", "POST", "PATCH", "DELETE"] });
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ZodError) return reply.status(400).send({ error: "validation_error", details: err.issues });
