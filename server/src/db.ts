@@ -151,6 +151,11 @@ const MIGRATIONS: string[] = [
   CREATE INDEX words_lemma ON words(lemma);
   CREATE UNIQUE INDEX words_lemma_pos_owner ON words(lemma, pos, IFNULL(created_by, 0));
   `,
+  // v3: 学習記録の一覧（時刻順）とカードごとの履歴を引くための索引
+  `
+  CREATE INDEX IF NOT EXISTS review_logs_user_time ON review_logs(user_id, reviewed_at, id);
+  CREATE INDEX IF NOT EXISTS review_logs_card ON review_logs(card_id, reviewed_at);
+  `,
 ];
 
 /** テーブルを作り直すマイグレーション（外部キー無効化が必要なもの） */

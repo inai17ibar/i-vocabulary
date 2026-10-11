@@ -27,7 +27,7 @@ function niceMax(v: number): number {
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
 }
 
-export function BarChart({ data, label, valueLabel }: { data: { x: string; y: number; sub?: string }[]; label: string; valueLabel: string }) {
+export function BarChart({ data, label, valueLabel, onSelect }: { data: { x: string; y: number; sub?: string }[]; label: string; valueLabel: string; onSelect?: (index: number) => void }) {
   const [hover, setHover] = useState<number | null>(null);
   const [ref, W] = useWidth();
   const max = niceMax(Math.max(...data.map((d) => d.y), 1));
@@ -60,6 +60,8 @@ export function BarChart({ data, label, valueLabel }: { data: { x: string; y: nu
             <g key={d.x}>
               {path && <path d={path} fill="var(--series-1)" opacity={hover === null || hover === i ? 1 : 0.55} />}
               <rect x={PAD.l + i * step} y={PAD.t} width={step} height={ih} fill="transparent" tabIndex={0}
+                style={onSelect ? { cursor: "pointer" } : undefined} onClick={onSelect && (() => onSelect(i))}
+                onKeyDown={onSelect && ((e) => { if (e.key === "Enter") onSelect(i); })}
                 onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)}>
                 <title>{`${d.x}: ${d.y} ${valueLabel}`}</title>
               </rect>

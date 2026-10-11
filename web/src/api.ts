@@ -1,5 +1,5 @@
 import type {
-  AuthResponse, CamblyLesson, Card, DailyTasks, ExpressionGroup, LessonTarget, LevelDef, ReviewRequest, ReviewResult,
+  AuthResponse, CamblyLesson, Card, CardDetail, DailyTasks, HistoryResponse, ReviewLogPage, ScheduleResponse, ExpressionGroup, LessonTarget, LevelDef, ReviewRequest, ReviewResult,
   Stats, StudySession, TranscriptAnalysis, User, Word,
 } from "@ivocab/shared";
 
@@ -32,6 +32,11 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return data as T;
 }
 
+function qs(q: Record<string, string | number | undefined>): string {
+  const p = Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+  return p.length ? `?${p.join("&")}` : "";
+}
+
 export const api = {
   register: (b: { email: string; password: string; displayName?: string; levelId?: string; timezone?: string }) => req<AuthResponse>("POST", "/auth/register", b),
   login: (email: string, password: string) => req<AuthResponse>("POST", "/auth/login", { email, password }),
@@ -43,6 +48,10 @@ export const api = {
   session: (task: string) => req<StudySession>("GET", `/study/session?task=${task}`),
   review: (r: ReviewRequest) => req<ReviewResult>("POST", "/reviews", r),
   stats: () => req<Stats>("GET", "/stats"),
+  history: (q: { from?: string; to?: string } = {}) => req<HistoryResponse>("GET", `/history${qs(q)}`),
+  reviewLogs: (q: { date?: string; cardId?: number; limit?: number; before?: number } = {}) => req<ReviewLogPage>("GET", `/reviews${qs(q)}`),
+  schedule: (days = 14) => req<ScheduleResponse>("GET", `/schedule?days=${days}`),
+  card: (id: number) => req<CardDetail>("GET", `/cards/${id}`),
   words: (q: { q?: string; cefr?: string; offset?: number }) => {
     const p = new URLSearchParams();
     if (q.q) p.set("q", q.q);

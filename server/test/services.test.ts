@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openDb } from "../src/db.ts";
 import { applyEnrichment, cefrFromRank, datamuseProvider, enrichWords, freeDictionaryProvider, importRows, parseCsv } from "../src/services/importers.ts";
-import { forgettingCurve, gradeFromQuiz } from "../src/services/srs.ts";
+import { type CardRow, forgettingCurve, gradeFromQuiz, retrievability } from "../src/services/srs.ts";
 import { inflections, makeCloze } from "../src/services/text.ts";
 import { getWord, upsertWord } from "../src/services/vocab.ts";
 import { extractCorrections } from "../src/services/cambly.ts";
@@ -26,6 +26,15 @@ describe("srs", () => {
     expect(forgettingCurve(10, 0)).toBeCloseTo(1);
     expect(forgettingCurve(10, 10)).toBeCloseTo(0.9, 5);
     expect(forgettingCurve(10, 30)).toBeLessThan(0.9);
+  });
+  it("lowers retrievability within the same day instead of rounding elapsed time to whole days", () => {
+    const reviewed = new Date("2026-10-11T00:00:00Z");
+    const row = { state: 2, stability: 1, last_review: reviewed.toISOString(), due: reviewed.toISOString() } as CardRow;
+    const at = (hours: number) => retrievability(row, new Date(reviewed.getTime() + hours * 3600_000))!;
+    expect(at(0)).toBeCloseTo(1);
+    expect(at(12)).toBeLessThan(at(1));
+    expect(at(24)).toBeCloseTo(0.9, 2);
+    expect(retrievability({ ...row, state: 0 }, reviewed)).toBeNull();
   });
   it("maps quiz results to grades", () => {
     expect(gradeFromQuiz(false)).toBe(1);
@@ -152,7 +161,7 @@ describe("migration v2", () => {
     upsertWord(v1, { lemma: "brave", pos: "adj", cefr: "B1", source: "t", examples: [{ en: "a brave act", ja: null }], synonyms: [{ lemma: "bold" }] });
     v1.close();
     const raw = new DatabaseSync(path);
-    expect((raw.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(2);
+    expect((raw.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(3);
     raw.exec("UPDATE schema_version SET version = 1");
     raw.exec("DROP INDEX words_lemma_pos_owner; DROP INDEX words_lemma");
     raw.close();

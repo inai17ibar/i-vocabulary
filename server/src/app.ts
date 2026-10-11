@@ -10,6 +10,7 @@ import { AuthError, login, logout, register, updateUser, userFromToken } from ".
 import { deleteCard, ensureCard, listCards, NotFoundError, recordReview, toCardDto } from "./services/cards.ts";
 import { addFromLesson, analyzeTranscript, createLesson, getLesson, listLessons, markTargetUsed, prepSheet, suggestTargets, updateLesson } from "./services/cambly.ts";
 import { gradeFromQuiz } from "./services/srs.ts";
+import { cardDetail, history, listReviewLogs, schedule } from "./services/history.ts";
 import { computeStats } from "./services/stats.ts";
 import { buildSession, dailyTasks, TASK_KEYS } from "./services/study.ts";
 import { canSeeWord, getExpressionGroup, getWord, listExpressionGroups, searchWords } from "./services/vocab.ts";
@@ -133,6 +134,7 @@ export async function buildApp(opts: AppOptions) {
           const row = ensureCard(db, req.user.id, body.itemType, body.itemId, "manual");
           return { card: toCardDto(db, row, new Date(), req.user.desiredRetention) };
         });
+        authed.get("/cards/:id", async (req) => cardDetail(db, req.user, idParam.parse(req.params).id));
         authed.delete("/cards/:id", async (req) => {
           deleteCard(db, req.user.id, idParam.parse(req.params).id);
           return { ok: true };
@@ -178,6 +180,31 @@ export async function buildApp(opts: AppOptions) {
         });
 
         authed.get("/stats", async (req) => computeStats(db, req.user));
+
+        // ---- 学習記録・予定 --------------------------------------------
+        const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
+        authed.get("/reviews", async (req) => {
+          const q = z.object({
+            date: isoDate.optional(),
+            from: isoDate.optional(),
+            to: isoDate.optional(),
+            cardId: z.coerce.number().int().positive().optional(),
+            limit: z.coerce.number().int().min(1).max(200).default(50),
+            before: z.coerce.number().int().positive().optional(),
+          }).parse(req.query);
+          return listReviewLogs(db, req.user, q);
+        });
+        authed.get("/history", async (req) => {
+          const q = z.object({ from: isoDate.optional(), to: isoDate.optional() })
+            .refine((r) => !r.from || !r.to || r.from <= r.to, "from must be on or before to")
+            .refine((r) => !r.from || !r.to || (Date.parse(r.to) - Date.parse(r.from)) / 86_400_000 < 366, "range must be within 366 days")
+            .parse(req.query);
+          return history(db, req.user, q);
+        });
+        authed.get("/schedule", async (req) => {
+          const q = z.object({ days: z.coerce.number().int().min(1).max(90).default(14) }).parse(req.query);
+          return schedule(db, req.user, q);
+        });
 
         // ---- Cambly 連携 ----------------------------------------------
         authed.post("/cambly/analyze", async (req) => {

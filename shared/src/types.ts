@@ -196,6 +196,91 @@ export interface Stats {
   masteredByCefr: Record<Cefr, number>;
 }
 
+// ---- 学習記録・予定 -------------------------------------------------
+
+/** 1 回分の回答記録（GET /reviews, GET /cards/:id） */
+export interface ReviewLogEntry {
+  id: number;
+  cardId: number;
+  itemType: ItemType;
+  itemId: number;
+  headline: string;
+  grade: Grade;
+  /** Again 以外を正解とみなす */
+  correct: boolean;
+  mode: QuizMode | "lesson";
+  /** 回答前のカードの状態（new なら初めて学習した回） */
+  stateBefore: CardState;
+  /** この回答で決まった次回までの日数 */
+  intervalDays: number;
+  durationMs: number | null;
+  reviewedAt: string;
+  /** ユーザーのタイムゾーンでの日付 */
+  localDate: string;
+}
+
+export interface ReviewLogPage {
+  reviews: ReviewLogEntry[];
+  /** 続きを取るときに `before` に渡す ID。最後なら null */
+  nextCursor: number | null;
+}
+
+/** 日別の学習サマリー（GET /history） */
+export interface HistoryDay {
+  date: string;
+  reviews: number;
+  correct: number;
+  /** その日に初めて学習したカード数 */
+  newCards: number;
+  /** 回答したカードの種類数 */
+  uniqueCards: number;
+  /** 回答時間の合計（ミリ秒、記録がある回答のみ） */
+  studyMs: number;
+}
+
+export interface HistoryResponse {
+  from: string;
+  to: string;
+  days: HistoryDay[];
+  totals: { reviews: number; correct: number; newCards: number; studyMs: number; activeDays: number };
+}
+
+/** 復習予定のカード（GET /schedule） */
+export interface ScheduledCard {
+  cardId: number;
+  itemType: ItemType;
+  itemId: number;
+  headline: string;
+  state: CardState;
+  due: string;
+  /** 現在の想起確率 (0〜1) */
+  retrievability: number | null;
+  stability: number;
+}
+
+export interface ScheduleDay {
+  date: string;
+  count: number;
+  cards: ScheduledCard[];
+}
+
+export interface ScheduleResponse {
+  /** 前日までに期限が来ていて未復習のカード */
+  overdue: ScheduleDay;
+  /** 今日から `days` 日分（今日の分は期限切れを含まない） */
+  days: ScheduleDay[];
+  /** 期間より後に予定されているカード数 */
+  later: number;
+  /** まだ一度も学習していないカード数（予定に含まれない） */
+  unstarted: number;
+}
+
+export interface CardDetail {
+  card: Card;
+  /** 新しい順 */
+  reviews: ReviewLogEntry[];
+}
+
 export interface CamblyLesson {
   id: number;
   lessonDate: string;

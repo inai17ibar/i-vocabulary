@@ -194,3 +194,48 @@ pre.sheet { white-space: pre-wrap; background: var(--surface-2); padding: 12px; 
 .feedback .verdict strong { display: block; font-size: 16px; }
 .feedback .verdict small { display: block; font-size: 12px; color: var(--text-2); margin-top: 2px; }
 @media (prefers-reduced-motion: reduce) { .question, .feedback { animation: none; } }
+
+/* 記録: 履歴・予定のリスト */
+.day-card { padding: 0; overflow: hidden; }
+.day-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 14px 16px; background: none; border: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; flex-wrap: wrap; }
+.day-head.static { cursor: default; border-bottom: 1px solid var(--border); }
+.day-title { font-weight: 700; flex: 1; }
+.day-meta { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.chev { color: var(--muted); width: 14px; text-align: center; }
+.day-card.overdue .day-head { background: var(--bad-bg); }
+.day-card.overdue .day-title { color: var(--bad); }
+.log-list { padding: 0 12px 8px; }
+.day-head + .log-list { border-top: 1px solid var(--border); }
+.day-head.static + .log-list { border-top: none; }
+.log-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 4px; background: none; border: none; border-bottom: 1px solid var(--border); color: var(--text); font: inherit; text-align: left; }
+button.log-row { cursor: pointer; }
+button.log-row:active { background: var(--surface-2); }
+.log-row:last-child { border-bottom: none; }
+.log-time { font-size: 12px; color: var(--muted); min-width: 40px; font-variant-numeric: tabular-nums; }
+.bottom-sheet .log-time { min-width: 84px; }
+.log-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.log-main .muted { font-size: 12px; }
+.log-headline { font-weight: 600; overflow-wrap: anywhere; }
+.new-tag { margin-left: 6px; font-size: 11px; vertical-align: 1px; background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.grade-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--surface-2); color: var(--text-2); }
+.grade-badge.g1 { background: var(--bad-bg); color: var(--bad); }
+.grade-badge.g3, .grade-badge.g4 { background: var(--good-bg); color: var(--good); }
+.recall { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 64px; text-align: right; }
+.recall small { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.recall-bar { width: 56px; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.recall-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.schedule-hero { margin-top: 12px; }
+
+/* カード詳細のボトムシート */
+.sheet-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.4); display: flex; align-items: flex-end; justify-content: center; animation: fade-in .15s ease-out; }
+.bottom-sheet { background: var(--bg); width: 100%; max-width: 640px; max-height: 85vh; overflow-y: auto; -webkit-overflow-scrolling: touch; border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + var(--safe-b)); animation: sheet-up .2s ease-out; }
+@media (min-width: 700px) { .sheet-backdrop { align-items: center; } .bottom-sheet { border-radius: 16px; } }
+.sheet-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+.sheet-stats > div { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
+.sheet-stats .k { display: block; font-size: 11px; color: var(--text-2); }
+.sheet-stats strong { font-size: 16px; }
+.sheet-sub { font-size: 15px; margin: 8px 0 0; }
+.bottom-sheet .log-list { padding: 0; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sheet-backdrop, .bottom-sheet { animation: none; } }

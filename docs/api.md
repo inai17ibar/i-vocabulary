@@ -39,6 +39,7 @@ iOS では Keychain に保存する。
 | POST | `/cards` | `{itemType, itemId}` 手動でカード追加 |
 | DELETE | `/cards/:id` | カード削除 |
 | GET | `/stats` | 連続日数・正答率・忘却曲線・復習予定・CEFR 別定着数 |
+| GET | `/cards/:id` | `CardDetail`: カードの現在の状態と全回答履歴（新しい順） |
 
 ### `POST /reviews`
 
@@ -54,6 +55,23 @@ iOS では Keychain に保存する。
 
 クイズの正解 (`answerIndex`) は問題に含めて返すので、クライアントはオフラインでも採点できる。
 `mode: "listening"` の問題は `prompt`（正解の単語）を表示せずに読み上げ、選択肢から選ばせる。
+
+## 学習記録・予定
+
+`/stats` は集計値だけを返す。個々の回答や「どのカードがいつ出るか」はこちら。型は `shared/src/types.ts` の `ReviewLogEntry` / `HistoryResponse` / `ScheduleResponse` / `CardDetail`。
+
+| Method | Path | Query | Response |
+|---|---|---|---|
+| GET | `/reviews` | `date?` `from?` `to?`（`YYYY-MM-DD`、ユーザーのタイムゾーン）, `cardId?`, `limit?`(1–200, 既定 50), `before?` | `ReviewLogPage` 回答記録を新しい順に |
+| GET | `/history` | `from?` `to?`（既定: 今日までの 30 日、最大 366 日） | `HistoryResponse` 日別サマリー（学習しなかった日も 0 で埋める）と期間合計 |
+| GET | `/schedule` | `days?`(1–90, 既定 14) | `ScheduleResponse` 期限切れ・日別の復習予定カード |
+
+- `/reviews` は回答時刻（`reviewedAt`）順。オフライン回答が後から届いても時刻どおりに並ぶ。
+  続きは前ページの `nextCursor` を `before` に渡す（`null` なら最後）。
+- `/history` の `newCards` は「その日に初めて学習したカード数」、`studyMs` は記録された回答時間の合計。
+- `/schedule` の各日は `count`（全件数）と `cards`（期限順、1 日最大 200 件）。`later` は期間より後、`unstarted` は未学習で予定のないカード数。
+  学習中（learning / relearning）のカードは数分〜の固定ステップで再出題されるので、`retrievability` より `due` を見て表示する。
+- `retrievability` は経過時間を小数の日数で計算する（当日中でも下がっていく）。
 
 ## Cambly 連携
 

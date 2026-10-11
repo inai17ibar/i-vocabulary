@@ -99,8 +99,11 @@ export function review(row: CardRow, grade: Grade, now: Date, desiredRetention: 
 
 /** 現在の想起確率。未学習カードは null */
 export function retrievability(row: CardRow, now: Date, desiredRetention = 0.9): number | null {
-  if (row.state === State.New || !row.last_review) return null;
-  return scheduler(desiredRetention).get_retrievability(rowToFsrs(row), now, false);
+  if (row.state === State.New || !row.last_review || row.stability <= 0) return null;
+  // ts-fsrs の get_retrievability は経過日数を暦日単位で切り捨てるため、当日に復習したカードは常に 100% になる。
+  // 経過時間を小数の日数で渡して、時間単位でも記憶率が下がっていくようにする
+  const elapsedDays = Math.max(0, (now.getTime() - new Date(row.last_review).getTime()) / 86_400_000);
+  return scheduler(desiredRetention).forgetting_curve(elapsedDays, row.stability);
 }
 
 /**
