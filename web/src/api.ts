@@ -59,6 +59,7 @@ export const api = {
   login: (email: string, password: string) => req<AuthResponse>("POST", "/auth/login", { email, password }),
   logout: () => req<{ ok: true }>("POST", "/auth/logout"),
   me: () => req<{ user: User }>("GET", "/me"),
+  deleteAccount: (password: string) => req<{ ok: true }>("DELETE", "/me", { password }),
   updateMe: (b: Partial<Pick<User, "displayName" | "levelId" | "desiredRetention" | "timezone">>) => req<{ user: User }>("PATCH", "/me", b),
   levels: () => req<{ levels: LevelDef[] }>("GET", "/levels"),
   tasks: () => req<DailyTasks>("GET", "/tasks/today"),

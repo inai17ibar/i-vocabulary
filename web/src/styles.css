@@ -78,6 +78,7 @@ h3 { font-size: 15px; margin: 18px 0 6px; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.block { width: 100%; }
 .btn:active:not(:disabled) { transform: scale(.98); }
+.ghost.danger { color: var(--bad); border-color: var(--bad); }
 .ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 0 14px; min-height: 44px; cursor: pointer; font-size: 15px; }
 .link { background: none; border: none; color: var(--accent); padding: 4px 0; cursor: pointer; font-size: 13px; }
 .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface-2); border-radius: 12px; padding: 3px; gap: 3px; }

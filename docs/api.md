@@ -15,6 +15,7 @@ iOS では Keychain に保存する。
 | POST | `/auth/logout` | – | `{ok}` |
 | GET | `/me` | – | `{user}` |
 | PATCH | `/me` | `{displayName?, levelId?, desiredRetention?(0.7–0.97), timezone?}` | `{user}` |
+| DELETE | `/me` | `{password}` | `{ok}`。アカウントと本人のデータ（カード・学習記録・追加した語・フレーズ・レッスン）をすべて削除。パスワード違いは 403 |
 
 ## マスタ
 

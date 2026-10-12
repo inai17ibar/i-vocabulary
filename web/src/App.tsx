@@ -57,7 +57,8 @@ export function App() {
       {tab.id === "words" && <Words />}
       {tab.id === "phrases" && <Phrases />}
       {tab.id === "stats" && <StatsPage view={route.arg} onView={(v) => go(`stats/${v}`)} onStudy={() => go("study/review")} />}
-      {tab.id === "settings" && <Settings user={user} onChange={setUser} onLogout={async () => { await api.logout().catch(() => {}); setToken(null); setUser(null); }} />}
+      {tab.id === "settings" && <Settings user={user} onChange={setUser} onLogout={async () => { await api.logout().catch(() => {}); setToken(null); setUser(null); }}
+        onDeleted={() => { setToken(null); setUser(null); }} />}
       <nav className="bottom" aria-label="メイン">
         {TABS.map((t) => (
           <button key={t.id} className={tab.id === t.id ? "active" : ""} aria-current={tab.id === t.id ? "page" : undefined} onClick={() => go(t.id)}>

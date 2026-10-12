@@ -22,6 +22,42 @@ describe("auth", () => {
     expect(r.body.user).toMatchObject({ levelId: "ielts-5.5", exam: "ielts" });
     expect((await call("PATCH", "/me", { levelId: "nope" })).status).toBe(400);
   });
+  it("deletes the account and all of the learner's data after checking the password", async () => {
+    const { app, db, call } = await setup({ phrases: { async suggest() { throw new Error("unused"); } } });
+    const session = (await call("GET", "/study/session?task=new")).body as StudySession;
+    const [first, second] = session.questions;
+    await call("POST", "/reviews", { cardId: first.cardId, grade: 3, mode: "flashcard" });
+    await call("POST", "/phrases", {
+      intentJa: "のんびりした",
+      chosen: { text: "I took it easy.", register: "casual", noteJa: "会話向き", example: null },
+      alternatives: [{ text: "I relaxed at home.", register: "neutral", noteJa: "説明的", example: null }],
+    });
+    await call("POST", "/lessons", { lessonDate: "2026-10-10", targetCardIds: [second.cardId] });
+
+    // 別のユーザーのデータは残る
+    const other = (await app.inject({ method: "POST", url: "/api/v1/auth/register", payload: { email: "b@example.com", password: "password123" } })).json();
+    await app.inject({ method: "GET", url: "/api/v1/study/session?task=new", headers: { authorization: `Bearer ${other.token}` } });
+    const count = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
+    const otherCards = count(`SELECT count(*) AS n FROM cards WHERE user_id = ${other.user.id}`);
+    expect(otherCards).toBeGreaterThan(0);
+
+    expect((await call("DELETE", "/me", { password: "wrong-pass" })).status).toBe(403);
+    expect((await call("GET", "/me")).status).toBe(200);
+    expect((await call("DELETE", "/me", {})).status).toBe(400);
+    expect((await call("DELETE", "/me", { password: "password123" })).status).toBe(200);
+
+    expect((await call("GET", "/me")).status).toBe(401);
+    const login = await app.inject({ method: "POST", url: "/api/v1/auth/login", payload: { email: "a@example.com", password: "password123" } });
+    expect(login.statusCode).toBe(401);
+    for (const t of ["users WHERE email = 'a@example.com'", "words WHERE created_by IS NOT NULL", "review_logs WHERE user_id <> " + other.user.id,
+      "cards WHERE user_id <> " + other.user.id, "cambly_lessons", "lesson_targets", "llm_usage", "sessions WHERE user_id <> " + other.user.id]) {
+      expect(count(`SELECT count(*) AS n FROM ${t}`), t).toBe(0);
+    }
+    expect(count(`SELECT count(*) AS n FROM cards WHERE user_id = ${other.user.id}`)).toBe(otherCards);
+    // 同じメールアドレスで登録し直せる
+    const again = await app.inject({ method: "POST", url: "/api/v1/auth/register", payload: { email: "a@example.com", password: "password123" } });
+    expect(again.statusCode).toBe(200);
+  });
 });
 
 describe("study flow", () => {

@@ -5,7 +5,7 @@ import { z, ZodError } from "zod";
 import type { User } from "@ivocab/shared";
 import { CEFR_LEVELS, DATA_SOURCES, DERIVED_DATA_NOTICE, LEVELS } from "@ivocab/shared";
 import type { DB } from "./db.ts";
-import { AuthError, login, logout, register, updateUser, userFromToken } from "./services/auth.ts";
+import { AuthError, PasswordMismatchError, deleteAccount, login, logout, register, updateUser, userFromToken } from "./services/auth.ts";
 import { deleteCard, ensureCard, listCards, NotFoundError, recordReview, toCardDto } from "./services/cards.ts";
 import { addFromLesson, analyzeTranscript, createLesson, getLesson, listLessons, markTargetUsed, prepSheet, suggestTargets, updateLesson } from "./services/lessons.ts";
 import { gradeFromQuiz } from "./services/srs.ts";
@@ -54,6 +54,7 @@ export function buildApp(opts: AppOptions) {
     if (err instanceof ZodError) return c.json({ error: "validation_error", details: err.issues }, 400);
     if (err instanceof BadRequestError) return c.json({ error: "bad_request", message: err.message }, 400);
     if (err instanceof AuthError) return c.json({ error: "auth_error", message: err.message }, 401);
+    if (err instanceof PasswordMismatchError) return c.json({ error: "password_mismatch", message: err.message }, 403);
     if (err instanceof NotFoundError) return c.json({ error: "not_found", message: err.message }, 404);
     if (err instanceof RateLimitError) return c.json({ error: "rate_limited", message: err.message }, 429);
     if (err instanceof AiUnavailableError) return c.json({ error: "ai_unavailable", message: err.message }, 503);
@@ -142,6 +143,11 @@ export function buildApp(opts: AppOptions) {
           return { ok: true };
         }));
         authed.get("/me", json(async (c) => ({ user: c.get("user") })));
+        authed.delete("/me", json(async (c) => {
+          const { password } = z.object({ password: z.string() }).parse(await readBody(c));
+          await deleteAccount(db, c.get("user").id, password);
+          return { ok: true };
+        }));
         authed.patch("/me", json(async (c) => {
           const body = z.object({
             displayName: z.string().max(50).optional(),

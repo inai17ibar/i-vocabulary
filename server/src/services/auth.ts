@@ -3,11 +3,14 @@ import { promisify } from "node:util";
 import type { ExamType, User } from "@ivocab/shared";
 import { getLevel } from "@ivocab/shared";
 import type { DB } from "../db.ts";
+import { tx } from "../db.ts";
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
 const SESSION_DAYS = 90;
 
 export class AuthError extends Error {}
+/** ログイン中の本人確認でパスワードが違う（401 にするとクライアントがログアウトしてしまうので 403） */
+export class PasswordMismatchError extends Error {}
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
@@ -93,4 +96,31 @@ export function updateUser(db: DB, id: number, patch: { displayName?: string; le
     id,
   );
   return getUser(db, id);
+}
+
+/**
+ * アカウント削除（App Store の審査要件）。本人確認にパスワードを求め、その人のデータをすべて消す。
+ * 外部キーの ON DELETE CASCADE に頼らず、依存する順に明示的に消す（DB の外部キー設定に左右されないように）
+ */
+export async function deleteAccount(db: DB, userId: number, password: string): Promise<void> {
+  const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userId) as { password_hash: string } | undefined;
+  if (!row || !(await verifyPassword(password, row.password_hash))) throw new PasswordMismatchError("パスワードが違います");
+  tx(db, () => {
+    const ownWords = "SELECT id FROM words WHERE created_by = ?";
+    db.prepare("DELETE FROM lesson_targets WHERE lesson_id IN (SELECT id FROM cambly_lessons WHERE user_id = ?)").run(userId);
+    db.prepare("DELETE FROM cambly_lessons WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM review_logs WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM lesson_targets WHERE card_id IN (SELECT id FROM cards WHERE user_id = ?)").run(userId);
+    db.prepare("DELETE FROM cards WHERE user_id = ?").run(userId);
+    // 自分で追加した語は本人にしか見えないが、念のため他人のカードからも外す
+    db.prepare(`DELETE FROM lesson_targets WHERE card_id IN (SELECT id FROM cards WHERE item_type = 'word' AND item_id IN (${ownWords}))`).run(userId);
+    db.prepare(`DELETE FROM review_logs WHERE card_id IN (SELECT id FROM cards WHERE item_type = 'word' AND item_id IN (${ownWords}))`).run(userId);
+    db.prepare(`DELETE FROM cards WHERE item_type = 'word' AND item_id IN (${ownWords})`).run(userId);
+    db.prepare(`DELETE FROM examples WHERE word_id IN (${ownWords})`).run(userId);
+    db.prepare(`DELETE FROM word_relations WHERE word_id IN (${ownWords})`).run(userId);
+    db.prepare("DELETE FROM words WHERE created_by = ?").run(userId);
+    db.prepare("DELETE FROM llm_usage WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  });
 }
