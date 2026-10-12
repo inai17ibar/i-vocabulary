@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { LevelDef, User } from "@ivocab/shared";
 import { api } from "../api.ts";
 import { MicCheck } from "../components/Pronounce.tsx";
+import { ServerPicker } from "../components/ServerPicker.tsx";
+import { canSwitchServer } from "../server.ts";
 import { type Accent, speak, sttSupported, ttsSupported, useSpeechPrefs } from "../speech.ts";
 
 export function Settings({ user, onChange, onLogout }: { user: User; onChange: (u: User) => void; onLogout: () => void }) {
@@ -71,6 +73,13 @@ export function Settings({ user, onChange, onLogout }: { user: User; onChange: (
           <strong style={{ minWidth: 48 }}>{Math.round(user.desiredRetention * 100)}%</strong>
         </div>
       </div>
+      {canSwitchServer() && (
+        <div className="card">
+          <h2>接続先サーバー</h2>
+          <p className="sub">ローカルの Mac・デプロイ版などを切り替えます。ログイン状態は接続先ごとに保存されます。</p>
+          <ServerPicker />
+        </div>
+      )}
       <div className="card">
         <h2>アカウント</h2>
         <p className="sub">{user.email} · タイムゾーン {user.timezone}</p>

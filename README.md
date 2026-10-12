@@ -41,19 +41,27 @@ npm run ios -w web             # Web をビルド → ios/ に同期 → シミ�
 npm run ios:open -w web        # Xcode で開く（実機ビルド・署名はここで）
 ```
 
-API の接続先はシミュレーター用が `web/.env.ios`（`http://localhost:8787/api/v1`）、実機用が `web/.env.device`（Mac の LAN IP）。
-実機は Mac と同じ Wi-Fi につなぎ、`npm run build:device -w web` → Xcode（または `xcodebuild -allowProvisioningUpdates`）で署名してインストールする。
-初回起動時の「ローカルネットワーク」の許可が必要。Mac の IP が変わったら `.env.device` を書き換えてビルドし直す。
+**接続先はアプリ内で切り替える**（ログイン画面の「接続先 › 変更」/ 設定 › 接続先サーバー）。ビルドし直す必要はない。
+候補から選ぶか `192.168.0.10:8787` / `https://…` を入力すると、接続テストが通ったときだけ切り替わる。ログイン状態は接続先ごとに保存される。
+
+| 設定 | 場所 | 用途 |
+|---|---|---|
+| `VITE_API_BASE` | `web/.env.ios` | 既定の接続先（`http://localhost:8787/api/v1` = シミュレーターから Mac） |
+| `VITE_API_SERVERS` | `web/.env.ios` | 候補一覧 `名前=URL;名前=URL`。デプロイしたら本番 URL をここに足す |
+| 個人の値 | `web/.env.ios.local`（git 管理外） | 自宅の LAN IP など。例: `VITE_API_SERVERS=自宅のMac=192.168.0.10:8787` |
+
+実機で Mac のサーバーを使うときは同じ Wi-Fi につなぎ、初回の「ローカルネットワーク」の許可を「許可」にする。
+Web 版（同一オリジン配信）では切り替え UI は出ない（開発サーバーと、`VITE_API_SERVERS` を設定したビルドでは出る）。
 
 | コマンド | 内容 |
 |---|---|
-| `npm test` | shared / server のテスト（vitest） |
+| `npm test` | shared / server / web のテスト（vitest） |
 | `npm run typecheck` | 全パッケージの型チェック |
 | `npm run seed` | 同梱データを DB に投入（初回起動時は自動） |
 | `npm run import:words -- --file x.csv --preset ngsl` | 単語リストの取り込み |
 | `npm run enrich -- --limit 200` | 外部辞書で定義・関係語を補完 |
 
-環境変数: `PORT`(8787) / `DATABASE_PATH`(data/ivocab.db) / `WEB_DIST` / `CORS_ORIGINS`（カンマ区切り）/ Web 側 `VITE_API_BASE`
+環境変数: `PORT`(8787) / `DATABASE_PATH`(data/ivocab.db) / `WEB_DIST` / `CORS_ORIGINS`（カンマ区切り）/ Web 側 `VITE_API_BASE` `VITE_API_SERVERS`
 
 ## 構成
 

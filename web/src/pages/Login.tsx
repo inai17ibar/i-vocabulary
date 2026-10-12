@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { LevelDef, User } from "@ivocab/shared";
 import { api } from "../api.ts";
+import { ServerPicker } from "../components/ServerPicker.tsx";
+import { canSwitchServer } from "../server.ts";
 
 export function Login({ onLogin }: { onLogin: (token: string, user: User) => void }) {
   const [mode, setMode] = useState<"login" | "register">("register");
@@ -53,6 +55,7 @@ export function Login({ onLogin }: { onLogin: (token: string, user: User) => voi
           </div>
         </form>
       </div>
+      {canSwitchServer() && <div className="card"><ServerPicker compact /></div>}
     </div>
   );
 }

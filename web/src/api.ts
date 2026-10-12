@@ -2,16 +2,27 @@ import type {
   AuthResponse, CamblyLesson, Card, CardDetail, DailyTasks, HistoryResponse, ReviewLogPage, ScheduleResponse, ExpressionGroup, LessonTarget, LevelDef, ReviewRequest, ReviewResult,
   Stats, StudySession, TranscriptAnalysis, User, Word,
 } from "@ivocab/shared";
+import { defaultApiBase, displayBase, getApiBase } from "./server.ts";
 
-/** API クライアント。iOS 版も同じエンドポイントを叩く（docs/api.md） */
-const BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
-const TOKEN_KEY = "ivocab.token";
+/** API クライアント。iOS 版も同じエンドポイントを叩く（docs/api.md）。接続先は server.ts で切り替える */
+const LEGACY_TOKEN_KEY = "ivocab.token";
+/** トークンは接続先ごとに保存する（サーバーを行き来してもそれぞれのログインが残る） */
+const tokenKey = () => `ivocab.token@${getApiBase()}`;
 
 export function getToken(): string | null {
-  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+  try {
+    const t = localStorage.getItem(tokenKey());
+    if (t) return t;
+    // 接続先ごとに分ける前のトークンは既定のサーバーのもの
+    return getApiBase() === defaultApiBase() ? localStorage.getItem(LEGACY_TOKEN_KEY) : null;
+  } catch { return null; }
 }
 export function setToken(t: string | null) {
-  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+  try {
+    if (t) localStorage.setItem(tokenKey(), t);
+    else localStorage.removeItem(tokenKey());
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch { /* ignore */ }
 }
 
 export class ApiError extends Error {
@@ -23,7 +34,13 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   const token = getToken();
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers["content-type"] = "application/json";
-  const res = await fetch(BASE + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  const base = getApiBase();
+  let res: Response;
+  try {
+    res = await fetch(base + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  } catch {
+    throw new ApiError(0, `サーバー（${displayBase(base)}）に接続できません`);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && token) { setToken(null); window.dispatchEvent(new Event("ivocab:logout")); }

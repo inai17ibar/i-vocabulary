@@ -11,7 +11,7 @@
     "build:ios": "vite build --mode ios && cap sync ios",
     "ios": "npm run build:ios && cap run ios",
     "ios:open": "cap open ios",
-    "build:device": "vite build --mode device && cap sync ios"
+    "test": "vitest run"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.3",
@@ -25,6 +25,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
   }
 }
