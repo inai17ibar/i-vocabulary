@@ -41,7 +41,9 @@ npm run ios -w web             # Web をビルド → ios/ に同期 → シミ�
 npm run ios:open -w web        # Xcode で開く（実機ビルド・署名はここで）
 ```
 
-API の接続先は `web/.env.ios` の `VITE_API_BASE`（既定 `http://localhost:8787/api/v1`。実機では Mac の LAN IP などに変更）。
+API の接続先はシミュレーター用が `web/.env.ios`（`http://localhost:8787/api/v1`）、実機用が `web/.env.device`（Mac の LAN IP）。
+実機は Mac と同じ Wi-Fi につなぎ、`npm run build:device -w web` → Xcode（または `xcodebuild -allowProvisioningUpdates`）で署名してインストールする。
+初回起動時の「ローカルネットワーク」の許可が必要。Mac の IP が変わったら `.env.device` を書き換えてビルドし直す。
 
 | コマンド | 内容 |
 |---|---|

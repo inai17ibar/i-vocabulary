@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "build:ios": "vite build --mode ios && cap sync ios",
     "ios": "npm run build:ios && cap run ios",
-    "ios:open": "cap open ios"
+    "ios:open": "cap open ios",
+    "build:device": "vite build --mode device && cap sync ios"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.3",
