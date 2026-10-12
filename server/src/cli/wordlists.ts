@@ -12,8 +12,9 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { DATA_SOURCES } from "@ivocab/shared";
 import { config } from "../config.ts";
-import { openDb } from "../db.ts";
+import { openDb } from "../db-node.ts";
 import { DATA_DIR } from "../seed.ts";
+import { applyGenerated, parseGeneratedFile } from "../services/llm-enrich.ts";
 import { ExampleIndex, importOpenWordlist, mergeWordlists, parseEjdict } from "../services/open-wordlists.ts";
 
 const { values } = parseArgs({
@@ -93,3 +94,10 @@ console.log(`  日本語訳あり ${r.withMeaning} (${pct(r.withMeaning)}) / 例
 console.log(`  CEFR: ${Object.entries(r.byCefr).sort().map(([k, v]) => `${k} ${v}`).join(", ")}`);
 console.log(`  source: ${Object.entries(r.bySource).map(([k, v]) => `${k} ${v}`).join(", ")}`);
 console.log("日本語訳のない語は新出カードとして出題されません（npm run enrich で英語定義などを補完できます）");
+
+// Claude で生成して記録済みの訳・例文・関係語があれば反映する（API は呼ばない）
+const generated = resolve(DATA_DIR, "generated/llm-words.jsonl");
+if (existsSync(generated)) {
+  const g = applyGenerated(db, parseGeneratedFile(readFileSync(generated, "utf8")));
+  console.log(`記録済みの AI 生成データを反映: ${g.applied} 語`);
+}

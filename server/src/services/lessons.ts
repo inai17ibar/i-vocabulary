@@ -1,4 +1,4 @@
-import type { CamblyLesson, Cefr, CorrectionPair, ItemType, LessonTarget, TranscriptAnalysis, User } from "@ivocab/shared";
+import type { Lesson, Cefr, CorrectionPair, ItemType, LessonTarget, TranscriptAnalysis, User } from "@ivocab/shared";
 import { getLevel } from "@ivocab/shared";
 import type { DB } from "../db.ts";
 import { tx } from "../db.ts";
@@ -9,11 +9,11 @@ import { expressionFragments, inflections, normalizeForMatch, STOPWORDS, tokeniz
 import { canSeeWord, upsertWord } from "./vocab.ts";
 
 /**
- * Cambly 連携。
- * Cambly には公開 API がないため、次の 3 つの導線で連携する:
- *  1. レッスン前: 「今日使いたい単語・表現」リストを作り、Cambly のチャットに貼れる形で出力
+ * 英会話レッスンと、手元の英文からの取り込み。特定のサービスには依存しない（オンライン英会話・対面レッスン・独学どれでも使える）。
+ *  1. レッスン前: 「今日使いたい単語・表現」リストを作り、講師とのチャットに貼れる英文として出力
  *  2. レッスン後: 実際に使えた語にチェック → 「アウトプット成功」として FSRS に Good で記録
- *  3. レッスン後: チャットログ／文字起こし／講師のメモを貼り付け → 既知語・表現・訂正・新出語候補を抽出してカード化
+ *  3. 英文から: チャットログ・文字起こし・講師のメモ・記事などを貼り付け → 既知語・表現・訂正・新出語候補を抽出してカード化
+ * テーブル名 cambly_lessons は初期の名残（中身は汎用のレッスン記録）。
  */
 
 const CORRECTION_PATTERNS: RegExp[] = [
@@ -93,18 +93,18 @@ export interface AddFromLessonInput {
   corrections?: { original: string; better: string }[];
 }
 
-/** レッスンで出てきた語・表現・訂正をカード化（source = cambly） */
+/** 英文に出てきた語・表現・訂正をカード化（source = capture） */
 export function addFromLesson(db: DB, user: User, input: AddFromLessonInput): CardRow[] {
   const level = getLevel(user.levelId);
   return tx(db, () => {
     const cards: CardRow[] = [];
     for (const id of input.wordIds ?? []) {
       if (!canSeeWord(db, id, user.id)) throw new NotFoundError(`word ${id} not found`);
-      cards.push(ensureCard(db, user.id, "word", id, "cambly"));
+      cards.push(ensureCard(db, user.id, "word", id, "capture"));
     }
     for (const id of input.groupIds ?? []) {
       if (!db.prepare("SELECT 1 FROM expression_groups WHERE id = ?").get(id)) throw new NotFoundError(`expression group ${id} not found`);
-      cards.push(ensureCard(db, user.id, "expression", id, "cambly"));
+      cards.push(ensureCard(db, user.id, "expression", id, "capture"));
     }
     for (const w of input.customWords ?? []) {
       if (!w.lemma.trim()) continue;
@@ -114,10 +114,10 @@ export function addFromLesson(db: DB, user: User, input: AddFromLessonInput): Ca
         cefr: level.cefr,
         meaningJa: w.meaningJa,
         examples: w.example ? [{ en: w.example, ja: null }] : [],
-        source: "cambly",
+        source: "capture",
         createdBy: user.id,
       });
-      cards.push(ensureCard(db, user.id, "word", id, "cambly"));
+      cards.push(ensureCard(db, user.id, "word", id, "capture"));
     }
     // 講師の訂正は「正しい言い方」をフレーズとして登録し、誤用を意味欄に残す
     for (const c of input.corrections ?? []) {
@@ -127,10 +127,10 @@ export function addFromLesson(db: DB, user: User, input: AddFromLessonInput): Ca
         pos: "phrase",
         cefr: level.cefr,
         meaningJa: `✗ ${c.original.trim()}`,
-        source: "cambly-correction",
+        source: "capture-correction",
         createdBy: user.id,
       });
-      cards.push(ensureCard(db, user.id, "word", id, "cambly"));
+      cards.push(ensureCard(db, user.id, "word", id, "capture"));
     }
     return cards;
   });
@@ -152,7 +152,7 @@ function lessonTargets(db: DB, lessonId: number): LessonTarget[] {
   return rows.map((r) => ({ cardId: r.card_id, used: !!r.used, itemType: r.item_type, headline: headlineFor(db, r.item_type, r.item_id) }));
 }
 
-function toLesson(db: DB, row: LessonRow): CamblyLesson {
+function toLesson(db: DB, row: LessonRow): Lesson {
   return {
     id: row.id,
     lessonDate: row.lesson_date,
@@ -164,13 +164,13 @@ function toLesson(db: DB, row: LessonRow): CamblyLesson {
   };
 }
 
-export function getLesson(db: DB, userId: number, id: number): CamblyLesson {
+export function getLesson(db: DB, userId: number, id: number): Lesson {
   const row = db.prepare("SELECT id, lesson_date, tutor, topic, notes, created_at FROM cambly_lessons WHERE id = ? AND user_id = ?").get(id, userId) as LessonRow | undefined;
   if (!row) throw new NotFoundError(`lesson ${id} not found`);
   return toLesson(db, row);
 }
 
-export function listLessons(db: DB, userId: number): CamblyLesson[] {
+export function listLessons(db: DB, userId: number): Lesson[] {
   const rows = db.prepare("SELECT id, lesson_date, tutor, topic, notes, created_at FROM cambly_lessons WHERE user_id = ? ORDER BY lesson_date DESC, id DESC LIMIT 50").all(userId) as unknown as LessonRow[];
   return rows.map((r) => toLesson(db, r));
 }
@@ -198,7 +198,7 @@ export interface LessonInput {
   targetCardIds?: number[];
 }
 
-export function createLesson(db: DB, user: User, input: LessonInput): CamblyLesson {
+export function createLesson(db: DB, user: User, input: LessonInput): Lesson {
   const id = tx(db, () => {
     const r = db.prepare("INSERT INTO cambly_lessons (user_id, lesson_date, tutor, topic, notes, transcript, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
       user.id, input.lessonDate, input.tutor ?? null, input.topic ?? null, input.notes ?? null, input.transcript ?? null, new Date().toISOString(),
@@ -218,7 +218,7 @@ function setTargets(db: DB, userId: number, lessonId: number, cardIds: number[])
   }
 }
 
-export function updateLesson(db: DB, user: User, id: number, input: Partial<LessonInput>): CamblyLesson {
+export function updateLesson(db: DB, user: User, id: number, input: Partial<LessonInput>): Lesson {
   getLesson(db, user.id, id);
   tx(db, () => {
     const cur = db.prepare("SELECT * FROM cambly_lessons WHERE id = ?").get(id) as Record<string, string | null>;
@@ -236,7 +236,7 @@ export function updateLesson(db: DB, user: User, id: number, input: Partial<Less
 }
 
 /** レッスン中に使えた → FSRS に Good として記録（1 レッスン 1 回まで） */
-export function markTargetUsed(db: DB, user: User, lessonId: number, cardId: number, used: boolean): CamblyLesson {
+export function markTargetUsed(db: DB, user: User, lessonId: number, cardId: number, used: boolean): Lesson {
   getLesson(db, user.id, lessonId);
   const t = db.prepare("SELECT used FROM lesson_targets WHERE lesson_id = ? AND card_id = ?").get(lessonId, cardId) as { used: number } | undefined;
   if (!t) throw new NotFoundError(`target ${cardId} not in lesson ${lessonId}`);
@@ -247,8 +247,8 @@ export function markTargetUsed(db: DB, user: User, lessonId: number, cardId: num
   return getLesson(db, user.id, lessonId);
 }
 
-/** Cambly のチャットに貼る「今日の練習リスト」 */
-export function prepSheet(db: DB, lesson: CamblyLesson): string {
+/** 講師とのチャットに貼る「今日の練習リスト」 */
+export function prepSheet(db: DB, lesson: Lesson): string {
   const words = lesson.targets.filter((t) => t.itemType === "word").map((t) => t.headline);
   const exprs = lesson.targets
     .filter((t) => t.itemType === "expression")

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { openDb, SCHEMA_VERSION } from "../src/db.ts";
+import { openDb } from "../src/db-node.ts";
+import { SCHEMA_VERSION } from "../src/db.ts";
 import { applyEnrichment, cefrFromRank, datamuseProvider, enrichWords, freeDictionaryProvider, importRows, parseCsv } from "../src/services/importers.ts";
 import { type CardRow, forgettingCurve, gradeFromQuiz, retrievability } from "../src/services/srs.ts";
 import { inflections, makeCloze } from "../src/services/text.ts";
 import { getWord, upsertWord } from "../src/services/vocab.ts";
-import { extractCorrections } from "../src/services/cambly.ts";
+import { extractCorrections } from "../src/services/lessons.ts";
 import { endOfLocalDay, localDate } from "../src/services/time.ts";
 
 describe("text", () => {
@@ -116,7 +117,7 @@ describe("importers", () => {
   });
 });
 
-describe("cambly corrections", () => {
+describe("correction extraction", () => {
   it("extracts several correction formats", () => {
     const text = [
       "- I am agree → I agree",
@@ -149,6 +150,21 @@ describe("listening quiz", () => {
   });
 });
 
+describe("migrations", () => {
+  it("upgrades a database that is one version behind (the newest migration runs, older ones do not re-run)", async () => {
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const path = join(mkdtempSync(join(tmpdir(), "ivocab-")), "prev.db");
+    const db = openDb(path);
+    db.prepare("UPDATE schema_version SET version = ?").run(SCHEMA_VERSION - 1);
+    db.close?.();
+    const reopened = openDb(path);
+    expect((reopened.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
+    reopened.close?.();
+  });
+});
+
 describe("migration v2", () => {
   it("rebuilds the words table without losing rows or child records", async () => {
     const { DatabaseSync } = await import("node:sqlite");
@@ -159,7 +175,7 @@ describe("migration v2", () => {
     // v1 スキーマの DB を作る（v2 の直前の状態）
     const v1 = openDb(path);
     upsertWord(v1, { lemma: "brave", pos: "adj", cefr: "B1", source: "t", examples: [{ en: "a brave act", ja: null }], synonyms: [{ lemma: "bold" }] });
-    v1.close();
+    v1.close?.();
     const raw = new DatabaseSync(path);
     expect((raw.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
     raw.exec("UPDATE schema_version SET version = 1");

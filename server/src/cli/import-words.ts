@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { isCefr } from "@ivocab/shared";
 import { config } from "../config.ts";
-import { openDb } from "../db.ts";
+import { openDb } from "../db-node.ts";
 import { importRows, parseCsv, type Preset } from "../services/importers.ts";
 
 const { values } = parseArgs({

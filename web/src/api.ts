@@ -1,6 +1,6 @@
 import type {
-  AuthResponse, CamblyLesson, Card, CardDetail, DailyTasks, HistoryResponse, ReviewLogPage, ScheduleResponse, ExpressionGroup, LessonTarget, LevelDef, ReviewRequest, ReviewResult,
-  Stats, StudySession, TranscriptAnalysis, User, Word,
+  AuthResponse, Lesson, Card, CardDetail, DailyTasks, HistoryResponse, ReviewLogPage, ScheduleResponse, ExpressionGroup, LessonTarget, LevelDef, ReviewRequest, ReviewResult,
+  PhraseRequest, PhraseSuggestion, SavePhraseRequest, Stats, StudySession, TranscriptAnalysis, User, Word,
 } from "@ivocab/shared";
 import { defaultApiBase, displayBase, getApiBase } from "./server.ts";
 
@@ -80,16 +80,19 @@ export const api = {
   cards: () => req<{ cards: Card[] }>("GET", "/cards?limit=500"),
   addCard: (itemType: "word" | "expression", itemId: number) => req<{ card: Card }>("POST", "/cards", { itemType, itemId }),
   deleteCard: (id: number) => req<{ ok: true }>("DELETE", `/cards/${id}`),
-  analyze: (text: string) => req<TranscriptAnalysis>("POST", "/cambly/analyze", { text }),
+  suggestPhrases: (b: PhraseRequest) => req<PhraseSuggestion>("POST", "/phrases/suggest", b),
+  savePhrase: (b: SavePhraseRequest) => req<{ word: Word; card: Card }>("POST", "/phrases", b),
+  phrases: () => req<{ phrases: Word[] }>("GET", "/phrases"),
+  analyze: (text: string) => req<TranscriptAnalysis>("POST", "/capture/analyze", { text }),
   addLessonCards: (b: { wordIds?: number[]; groupIds?: number[]; customWords?: { lemma: string; meaningJa: string }[]; corrections?: { original: string; better: string }[] }) =>
-    req<{ cards: Card[] }>("POST", "/cambly/cards", b),
-  suggestions: () => req<{ targets: LessonTarget[] }>("GET", "/cambly/suggestions"),
-  lessons: () => req<{ lessons: CamblyLesson[] }>("GET", "/cambly/lessons"),
-  lesson: (id: number) => req<{ lesson: CamblyLesson; prepSheet: string }>("GET", `/cambly/lessons/${id}`),
+    req<{ cards: Card[] }>("POST", "/capture/cards", b),
+  suggestions: () => req<{ targets: LessonTarget[] }>("GET", "/lessons/suggestions"),
+  lessons: () => req<{ lessons: Lesson[] }>("GET", "/lessons"),
+  lesson: (id: number) => req<{ lesson: Lesson; prepSheet: string }>("GET", `/lessons/${id}`),
   createLesson: (b: { lessonDate: string; tutor?: string; topic?: string; targetCardIds: number[] }) =>
-    req<{ lesson: CamblyLesson; prepSheet: string }>("POST", "/cambly/lessons", b),
-  updateLesson: (id: number, b: { notes?: string; tutor?: string; topic?: string }) => req<{ lesson: CamblyLesson; prepSheet: string }>("PATCH", `/cambly/lessons/${id}`, b),
-  markUsed: (lessonId: number, cardId: number, used: boolean) => req<{ lesson: CamblyLesson }>("PUT", `/cambly/lessons/${lessonId}/targets/${cardId}`, { used }),
+    req<{ lesson: Lesson; prepSheet: string }>("POST", "/lessons", b),
+  updateLesson: (id: number, b: { notes?: string; tutor?: string; topic?: string }) => req<{ lesson: Lesson; prepSheet: string }>("PATCH", `/lessons/${id}`, b),
+  markUsed: (lessonId: number, cardId: number, used: boolean) => req<{ lesson: Lesson }>("PUT", `/lessons/${lessonId}/targets/${cardId}`, { used }),
 };
 
 export function todayLocal(): string {

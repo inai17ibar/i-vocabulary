@@ -6,14 +6,14 @@ import { Login } from "./pages/Login.tsx";
 import { Today } from "./pages/Today.tsx";
 import { Study } from "./pages/Study.tsx";
 import { Words } from "./pages/Words.tsx";
-import { Cambly } from "./pages/Cambly.tsx";
+import { Phrases } from "./pages/Phrases.tsx";
 import { StatsPage } from "./pages/Stats.tsx";
 import { Settings } from "./pages/Settings.tsx";
 
 const TABS = [
   { id: "today", label: "今日", title: "今日の学習", icon: IconHome },
   { id: "words", label: "単語", title: "単語・表現", icon: IconBook },
-  { id: "cambly", label: "Cambly", title: "Cambly 連携", icon: IconChat },
+  { id: "phrases", label: "フレーズ", title: "フレーズ帳", icon: IconChat },
   { id: "stats", label: "記録", title: "学習の記録", icon: IconChart },
   { id: "settings", label: "設定", title: "設定", icon: IconGear },
 ] as const;
@@ -55,7 +55,7 @@ export function App() {
       </header>
       {tab.id === "today" && <Today onStart={(task) => go(`study/${task}`)} />}
       {tab.id === "words" && <Words />}
-      {tab.id === "cambly" && <Cambly />}
+      {tab.id === "phrases" && <Phrases />}
       {tab.id === "stats" && <StatsPage view={route.arg} onView={(v) => go(`stats/${v}`)} onStudy={() => go("study/review")} />}
       {tab.id === "settings" && <Settings user={user} onChange={setUser} onLogout={async () => { await api.logout().catch(() => {}); setToken(null); setUser(null); }} />}
       <nav className="bottom" aria-label="メイン">

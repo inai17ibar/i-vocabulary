@@ -1,7 +1,7 @@
 # i-vocabulary
 
 英会話のための英単語学習アプリ。**忘却曲線に沿った復習（FSRS）**、**類義語・対義語**、**同じ意図のいろんな言い方**、
-**英検・IELTS のレベル別タスク**、**Cambly のレッスンとの連携** を備えています。
+**英検・IELTS のレベル別タスク**、**「言えなかった」を AI で自然な英語にするフレーズ帳** を備えています。
 Web クライアント + API サーバー構成で、同じ API を将来の iOS アプリから使えるように設計しています。
 
 ## 主な機能
@@ -12,7 +12,7 @@ Web クライアント + API サーバー構成で、同じ API を将来の iOS
 | 類義語・対義語 | ニュアンス注記つき。類義語問題には対義語を、対義語問題には類義語を紛らわしい選択肢として混ぜる |
 | いろんな言い方 | 「意見を言う」「やんわり反対する」など 22 の意図ごとに、カジュアル〜フォーマルの言い方をセットで学習。言い換え・レジスター選択問題 |
 | レベル別タスク | 英検 5級〜1級（準2級プラス含む）/ IELTS 4.0〜9.0。レベルに応じた出題 CEFR 帯・1日の量・アウトプット課題（英検二次 / IELTS Speaking 型） |
-| Cambly 連携 | レッスン前: 忘れかけの語から「今日使う語」リストを作り、チャットに貼る英文を生成 → レッスン後: 使えた語にチェックすると復習に反映 → チャットログを貼ると既知語・表現・**講師の訂正**・新出語候補を抽出してカード化 |
+| フレーズ帳 | **言えなかった**: 言いたかったことを日本語で書くと AI（Claude）が自然な言い方をカジュアル〜フォーマルで提案 → 選んだものが自分専用のフレーズカードに。**英文から**: チャットログ・メモ・記事などを貼ると既知語・表現・**訂正**・新出語候補を抽出してカード化。**レッスン準備**: 忘れかけの語から「今日使う語」リストを作り、使えたらチェック |
 | 発音 | 単語・例文・表現の読み上げ（米/英アクセント、ゆっくり再生、新出語の自動再生）、発音記号、**マイクで言ってみて音声認識で判定する発音チェック**、音声を聞いて単語を選ぶ**リスニング問題** |
 | モバイル | 下部タブバー・親指で押せる位置の回答ボタン・全画面の学習画面。ホーム画面に追加すればアプリのように起動（PWA） |
 | 単語供給 | 同梱の厳選データ 120 語 + `npm run wordlists` で CEFR-J・Octanove・NGSL 系・EJDict・Tatoeba から約 1 万語（訳・和訳つき例文つき） + Free Dictionary / Datamuse で自動補完（[詳細](docs/word-sources.md)） |
@@ -27,7 +27,9 @@ npm run dev          # API :8787 + Web :5173（/api はプロキシ）
 # → http://localhost:5173
 ```
 
-本番相当（API が Web のビルドも配信）:
+**本番（Cloudflare Workers + Durable Objects）**: https://i-vocabulary.inai17ibar.workers.dev — `npm run deploy` でデプロイ（[手順](docs/deploy.md)）。
+
+ローカルで本番相当（API が Web のビルドも配信）:
 
 ```bash
 npm run build && npm start   # → http://localhost:8787
@@ -58,6 +60,8 @@ Web 版（同一オリジン配信）では切り替え UI は出ない（開発
 | `npm test` | shared / server / web のテスト（vitest） |
 | `npm run typecheck` | 全パッケージの型チェック |
 | `npm run seed` | 同梱データを DB に投入（初回起動時は自動） |
+| `npm run deploy` / `npm run deploy:data` | Cloudflare にデプロイ / 単語データを本番に投入（[docs/deploy.md](docs/deploy.md)） |
+| `npm run enrich:llm -- pilot\|batch\|apply` | Claude で訳・例文・類義語を生成して記録・反映（`ANTHROPIC_API_KEY` が必要） |
 | `npm run wordlists` | 公開語彙リスト（CEFR-J・NGSL ほか）から約 1 万語を取り込み（[出典とライセンス](docs/word-sources.md)） |
 | `npm run import:words -- --file x.csv --preset ngsl` | 単語リストの取り込み |
 | `npm run enrich -- --limit 200` | 外部辞書で定義・関係語を補完 |
@@ -68,7 +72,7 @@ Web 版（同一オリジン配信）では切り替え UI は出ない（開発
 
 ```
 shared/   API 型定義・英検/IELTS/CEFR レベル定義（Web/Server 共通）
-server/   Fastify + SQLite + ts-fsrs の REST API (/api/v1)
+server/   Hono + SQLite + ts-fsrs の REST API (/api/v1)。Node.js（node:sqlite）と Cloudflare Workers（Durable Objects の SQLite）の両方で動く
 web/      React + Vite の Web クライアント
 data/     同梱シードデータ・サンプル CSV
 docs/     api.md / architecture.md（iOS 展開計画）/ word-sources.md
@@ -77,3 +81,4 @@ docs/     api.md / architecture.md（iOS 展開計画）/ word-sources.md
 - [API リファレンス](docs/api.md)
 - [アーキテクチャと iOS への展開](docs/architecture.md)
 - [単語リストの供給方法](docs/word-sources.md)
+- [デプロイ（Cloudflare）](docs/deploy.md)

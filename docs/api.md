@@ -73,17 +73,30 @@ iOS では Keychain に保存する。
   学習中（learning / relearning）のカードは数分〜の固定ステップで再出題されるので、`retrievability` より `due` を見て表示する。
 - `retrievability` は経過時間を小数の日数で計算する（当日中でも下がっていく）。
 
-## Cambly 連携
+## 「言えなかった」フレーズ帳（AI）
 
 | Method | Path | 説明 |
 |---|---|---|
-| POST | `/cambly/analyze` | `{text}` チャットログ等を解析 → 既知語・表現・訂正・新出語候補 |
-| POST | `/cambly/cards` | `{wordIds?, groupIds?, customWords?, corrections?}` 解析結果をカード化（source=`cambly`） |
-| GET | `/cambly/suggestions` | 次のレッスンで使うと良い語（想起確率が低い順） |
-| GET | `/cambly/lessons` | レッスン一覧 |
-| POST | `/cambly/lessons` | `{lessonDate, tutor?, topic?, notes?, transcript?, targetCardIds?}` → `{lesson, prepSheet}` |
-| GET/PATCH | `/cambly/lessons/:id` | 取得・更新 |
-| PUT | `/cambly/lessons/:id/targets/:cardId` | `{used}` レッスンで使えたら true → FSRS に Good で記録（1 レッスン 1 回） |
+| POST | `/phrases/suggest` | `PhraseRequest {text, context?}` → `PhraseSuggestion`。言いたかったこと（日本語・途中までの英語）から自然な言い方を 2〜4 個（カジュアル〜フォーマル）、英語の試みへのフィードバック、覚えると便利な語（辞書にあれば `wordId`） |
+| POST | `/phrases` | `SavePhraseRequest {intentJa, chosen, alternatives}` → `{word, card}`。選んだ言い方を本人専用のフレーズ（`pos: "phrase"`、`source: "phrase"`）として保存し、ほかの言い方はニュアンス注記つきの類義表現にする。新出カードの最初に出る |
+| GET | `/phrases` | 保存したフレーズ（新しい順） |
+
+- AI は Claude（サーバーの `ANTHROPIC_API_KEY`、モデルは `PHRASE_MODEL`、既定 `claude-opus-5-5`）。未設定なら 503 `ai_unavailable`。
+- 1 人 1 日 30 回まで（`PHRASE_DAILY_LIMIT`）。超えると 429 `rate_limited`。応答の `remainingToday` が残り回数。
+
+## 英文から学ぶ・英会話レッスン
+
+特定の英会話サービスには依存しない（オンライン英会話・対面・独学どれでも使える）。
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/capture/analyze` | `{text}` チャットログ・文字起こし・メモ・記事などを解析 → 既知語・表現・訂正・新出語候補 |
+| POST | `/capture/cards` | `{wordIds?, groupIds?, customWords?, corrections?}` 解析結果をカード化（source=`capture`） |
+| GET | `/lessons/suggestions` | 次のレッスンで使うと良い語（想起確率が低い順） |
+| GET | `/lessons` | レッスン一覧 |
+| POST | `/lessons` | `{lessonDate, tutor?, topic?, notes?, transcript?, targetCardIds?}` → `{lesson, prepSheet}`（講師とのチャットに貼る英文） |
+| GET/PATCH | `/lessons/:id` | 取得・更新 |
+| PUT | `/lessons/:id/targets/:cardId` | `{used}` レッスンで使えたら true → FSRS に Good で記録（1 レッスン 1 回） |
 
 ## エラー
 

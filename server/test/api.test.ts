@@ -125,7 +125,7 @@ describe("study flow", () => {
   });
 });
 
-describe("cambly integration", () => {
+describe("lessons and capture", () => {
   const transcript = `Tutor: So what did you do last weekend?
 Me: I bought a new bicycle and I think it was expensive, but I couldn't agree more that it's essential for commuting.
 Tutor: Nice! I didn't quite catch that last part.
@@ -136,7 +136,7 @@ Tutor: Your pronunciation is improving remarkably.`;
 
   it("analyzes a lesson transcript", async () => {
     const { call } = await setup();
-    const a = (await call("POST", "/cambly/analyze", { text: transcript })).body;
+    const a = (await call("POST", "/capture/analyze", { text: transcript })).body;
     const lemmas = a.knownWords.map((w: { lemma: string }) => w.lemma);
     expect(lemmas).toEqual(expect.arrayContaining(["buy", "expensive", "essential", "improve"]));
     expect(a.expressions.map((e: { text: string }) => e.text)).toEqual(expect.arrayContaining(["I couldn't agree more.", "I didn't quite catch that."]));
@@ -150,48 +150,48 @@ Tutor: Your pronunciation is improving remarkably.`;
 
   it("adds lesson items as cards and runs the prep → used flow", async () => {
     const { call } = await setup();
-    const a = (await call("POST", "/cambly/analyze", { text: transcript })).body;
-    const added = await call("POST", "/cambly/cards", {
+    const a = (await call("POST", "/capture/analyze", { text: transcript })).body;
+    const added = await call("POST", "/capture/cards", {
       wordIds: a.knownWords.slice(0, 2).map((w: { wordId: number }) => w.wordId),
       groupIds: [a.expressions[0].groupId],
       customWords: [{ lemma: "commute", meaningJa: "通勤（する）", pos: "verb" }],
       corrections: a.corrections,
     });
     expect(added.body.cards).toHaveLength(6);
-    expect(added.body.cards.every((c: { source: string }) => c.source === "cambly")).toBe(true);
+    expect(added.body.cards.every((c: { source: string }) => c.source === "capture")).toBe(true);
 
     // ユーザー追加語は他ユーザーの検索に出ない
     const words = (await call("GET", "/words?q=commute")).body;
     expect(words.total).toBe(1);
 
     for (const c of added.body.cards) await call("POST", "/reviews", { cardId: c.id, grade: 3, mode: "flashcard" });
-    const sug = (await call("GET", "/cambly/suggestions")).body.targets;
+    const sug = (await call("GET", "/lessons/suggestions")).body.targets;
     expect(sug.length).toBeGreaterThan(0);
 
-    const created = await call("POST", "/cambly/lessons", { lessonDate: "2026-10-10", tutor: "Emma", targetCardIds: sug.map((t: { cardId: number }) => t.cardId) });
+    const created = await call("POST", "/lessons", { lessonDate: "2026-10-10", tutor: "Emma", targetCardIds: sug.map((t: { cardId: number }) => t.cardId) });
     expect(created.body.prepSheet).toContain("Today I'd like to practice");
     const firstWord = created.body.lesson.targets.find((t: { itemType: string }) => t.itemType === "word");
     expect(created.body.prepSheet).toContain(`- ${firstWord.headline}`);
     const lesson = created.body.lesson;
     const target = lesson.targets[0];
-    const used = await call("PUT", `/cambly/lessons/${lesson.id}/targets/${target.cardId}`, { used: true });
+    const used = await call("PUT", `/lessons/${lesson.id}/targets/${target.cardId}`, { used: true });
     expect(used.body.lesson.targets.find((t: { cardId: number }) => t.cardId === target.cardId).used).toBe(true);
     // 二重チェックしてもレビューは 1 回だけ
-    await call("PUT", `/cambly/lessons/${lesson.id}/targets/${target.cardId}`, { used: false });
-    await call("PUT", `/cambly/lessons/${lesson.id}/targets/${target.cardId}`, { used: true });
+    await call("PUT", `/lessons/${lesson.id}/targets/${target.cardId}`, { used: false });
+    await call("PUT", `/lessons/${lesson.id}/targets/${target.cardId}`, { used: true });
     const stats = (await call("GET", "/stats")).body;
     expect(stats.reviewsToday).toBe(6 + 1);
 
-    const patched = await call("PATCH", `/cambly/lessons/${lesson.id}`, { notes: "Talked about commuting" });
+    const patched = await call("PATCH", `/lessons/${lesson.id}`, { notes: "Talked about commuting" });
     expect(patched.body.lesson.notes).toBe("Talked about commuting");
-    expect((await call("GET", "/cambly/lessons")).body.lessons).toHaveLength(1);
+    expect((await call("GET", "/lessons")).body.lessons).toHaveLength(1);
   });
 
   it("does not let users touch other users' lessons", async () => {
     const one = await setup();
-    const lesson = (await one.call("POST", "/cambly/lessons", { lessonDate: "2026-10-10" })).body.lesson;
+    const lesson = (await one.call("POST", "/lessons", { lessonDate: "2026-10-10" })).body.lesson;
     const reg = await one.app.inject({ method: "POST", url: "/api/v1/auth/register", payload: { email: "b@example.com", password: "password123" } });
-    const res = await one.app.inject({ method: "GET", url: `/api/v1/cambly/lessons/${lesson.id}`, headers: { authorization: `Bearer ${reg.json().token}` } });
+    const res = await one.app.inject({ method: "GET", url: `/api/v1/lessons/${lesson.id}`, headers: { authorization: `Bearer ${reg.json().token}` } });
     expect(res.statusCode).toBe(404);
   });
 });
@@ -210,24 +210,24 @@ describe("user-owned words", () => {
 
   it("hides other users' custom words from ID lookups and card creation", async () => {
     const { call, callB } = await twoUsers();
-    const added = await call("POST", "/cambly/cards", { corrections: [{ original: "I go there", better: "I went there" }] });
+    const added = await call("POST", "/capture/cards", { corrections: [{ original: "I go there", better: "I went there" }] });
     const wordId = added.body.cards[0].itemId;
     expect((await call("GET", `/words/${wordId}`)).status).toBe(200);
     expect((await callB("GET", `/words/${wordId}`)).status).toBe(404);
     expect((await callB("POST", "/cards", { itemType: "word", itemId: wordId })).status).toBe(404);
-    expect((await callB("POST", "/cambly/cards", { wordIds: [wordId] })).status).toBe(404);
+    expect((await callB("POST", "/capture/cards", { wordIds: [wordId] })).status).toBe(404);
   });
 
   it("keeps the same custom word separate per user and never overwrites shared words", async () => {
     const { db, call, callB } = await twoUsers();
-    const a = await call("POST", "/cambly/cards", { corrections: [{ original: "I go there", better: "I went there" }] });
-    const b = await callB("POST", "/cambly/cards", { corrections: [{ original: "I goed there", better: "I went there" }] });
+    const a = await call("POST", "/capture/cards", { corrections: [{ original: "I go there", better: "I went there" }] });
+    const b = await callB("POST", "/capture/cards", { corrections: [{ original: "I goed there", better: "I went there" }] });
     expect(a.body.cards[0].itemId).not.toBe(b.body.cards[0].itemId);
     expect((await call("GET", `/words/${a.body.cards[0].itemId}`)).body.word.meaningJa).toBe("✗ I go there");
 
     // 共有の seed 語と同じ lemma/pos を追加しても seed 側は変わらない
     const seed = db.prepare("SELECT id, meaning_ja FROM words WHERE lemma = 'essential' AND created_by IS NULL").get() as { id: number; meaning_ja: string };
-    const custom = await callB("POST", "/cambly/cards", { customWords: [{ lemma: "essential", meaningJa: "上書きテスト", pos: "adj" }] });
+    const custom = await callB("POST", "/capture/cards", { customWords: [{ lemma: "essential", meaningJa: "上書きテスト", pos: "adj" }] });
     expect(custom.body.cards[0].itemId).not.toBe(seed.id);
     expect((await call("GET", `/words/${seed.id}`)).body.word.meaningJa).toBe(seed.meaning_ja);
   });

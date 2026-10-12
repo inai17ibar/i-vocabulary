@@ -147,7 +147,7 @@ export function getWord(db: DB, id: number): Word | null {
 }
 
 function hydrateWord(db: DB, row: WordRow): Word {
-  const examples = db.prepare("SELECT sentence AS en, translation_ja AS ja, attribution FROM examples WHERE word_id = ? ORDER BY id").all(row.id) as unknown as Example[];
+  const examples = db.prepare("SELECT sentence AS en, translation_ja AS ja, attribution FROM examples WHERE word_id = ? ORDER BY CASE WHEN attribution IS NULL THEN 0 WHEN attribution LIKE 'AI生成%' THEN 1 ELSE 2 END, id").all(row.id) as unknown as Example[];
   return {
     id: row.id,
     lemma: row.lemma,

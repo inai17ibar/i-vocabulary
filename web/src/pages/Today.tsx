@@ -53,7 +53,7 @@ export function Today({ onStart }: { onStart: (task: string) => void }) {
           <SpeakButtons text={data.outputPrompt} compact />
         </div>
         <p style={{ margin: "6px 0" }}>{data.outputPrompt}</p>
-        <p className="muted">今日覚えた単語・表現を 2〜3 個使って声に出して答えてみましょう。Cambly のレッスンで講師に投げかけるのもおすすめです。</p>
+        <p className="muted">今日覚えた単語・表現を 2〜3 個使って声に出して答えてみましょう。英会話レッスンで講師に投げかけるのもおすすめです。言えなかったことは「フレーズ」タブで言い方を調べられます。</p>
       </div>
     </div>
   );

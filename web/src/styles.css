@@ -258,3 +258,12 @@ button.log-row:active { background: var(--surface-2); }
 .credits ul { padding-left: 18px; margin: 8px 0; }
 .credits li { margin: 8px 0; font-size: 14px; overflow-wrap: anywhere; }
 .credits .muted { font-size: 12px; }
+
+/* フレーズ帳 */
+.phrase-text { display: block; font-size: 17px; margin: 4px 0 2px; }
+.phrase-example { margin-top: 6px !important; padding-left: 8px; border-left: 2px solid var(--border); }
+.feedback-note { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; font-size: 14px; }
+.key-word { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.key-word:last-of-type { border-bottom: none; }
+.saved-phrase { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.saved-phrase:last-child { border-bottom: none; }

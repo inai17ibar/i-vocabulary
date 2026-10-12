@@ -9,7 +9,7 @@ export type ItemType = "word" | "expression";
 export type CardState = "new" | "learning" | "review" | "relearning";
 export type Register = "casual" | "neutral" | "formal";
 export type RelationType = "synonym" | "antonym";
-export type CardSource = "level" | "cambly" | "manual";
+export type CardSource = "level" | "capture" | "phrase" | "manual";
 
 /** FSRS の 4 段階評価。1=Again 2=Hard 3=Good 4=Easy */
 export type Grade = 1 | 2 | 3 | 4;
@@ -161,7 +161,7 @@ export interface ReviewResult {
 }
 
 export interface DailyTask {
-  key: "review" | "new" | "synonym" | "antonym" | "paraphrase" | "output" | "cambly";
+  key: "review" | "new" | "synonym" | "antonym" | "paraphrase" | "output" | "lesson";
   title: string;
   description: string;
   target: number;
@@ -287,7 +287,35 @@ export interface CardDetail {
   reviews: ReviewLogEntry[];
 }
 
-export interface CamblyLesson {
+// ---- 「言えなかった」フレーズ帳 ----------------------------------------------
+
+export interface PhraseRequest {
+  /** 言いたかったこと（日本語、または途中までの英語） */
+  text: string;
+  /** 場面（任意。例: 「オンライン英会話で週末の話」） */
+  context?: string;
+}
+
+export interface PhraseSuggestion {
+  /** 言いたかったことを短く整理した日本語（フレーズカードの意味になる） */
+  intentJa: string;
+  /** 自然な言い方（2〜4 個、カジュアル〜フォーマル） */
+  suggestions: { text: string; register: Register; noteJa: string; example: { en: string; ja: string } | null }[];
+  /** 入力に英語の試みがあった場合の短いフィードバック */
+  feedbackJa: string | null;
+  /** 覚えておくと便利な語（同梱・取り込み済みの単語なら wordId つき） */
+  keyWords: { lemma: string; meaningJa: string; wordId: number | null }[];
+  /** 今日あと何回使えるか */
+  remainingToday: number;
+}
+
+export interface SavePhraseRequest {
+  intentJa: string;
+  chosen: { text: string; register: Register; noteJa: string; example: { en: string; ja: string } | null };
+  alternatives: { text: string; register: Register; noteJa: string }[];
+}
+
+export interface Lesson {
   id: number;
   lessonDate: string;
   tutor: string | null;

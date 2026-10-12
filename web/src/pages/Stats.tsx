@@ -17,7 +17,7 @@ type View = (typeof VIEWS)[number]["id"];
 
 const MODE_JA: Record<ReviewLogEntry["mode"], string> = {
   flashcard: "単語カード", meaning: "意味", synonym: "類義語", antonym: "対義語", cloze: "穴埋め",
-  listening: "リスニング", paraphrase: "言い換え", lesson: "Cambly",
+  listening: "リスニング", paraphrase: "言い換え", lesson: "レッスン",
 };
 const GRADE_JA: Record<Grade, string> = { 1: "もう一度", 2: "難しい", 3: "正解", 4: "簡単" };
 const STATE_JA: Record<CardState, string> = { new: "未学習", learning: "学習中", review: "定着", relearning: "覚え直し中" };

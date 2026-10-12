@@ -1,5 +1,5 @@
 import { config } from "../config.ts";
-import { openDb } from "../db.ts";
+import { openDb } from "../db-node.ts";
 import { seedDatabase } from "../seed.ts";
 
 const db = openDb(config.dbPath);

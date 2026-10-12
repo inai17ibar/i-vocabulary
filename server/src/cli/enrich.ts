@@ -4,7 +4,7 @@
  */
 import { parseArgs } from "node:util";
 import { config } from "../config.ts";
-import { openDb } from "../db.ts";
+import { openDb } from "../db-node.ts";
 import { datamuseProvider, enrichWords, freeDictionaryProvider } from "../services/importers.ts";
 
 const { values } = parseArgs({ options: { limit: { type: "string", default: "100" }, force: { type: "boolean", default: false } } });

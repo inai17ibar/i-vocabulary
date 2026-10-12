@@ -6,3 +6,6 @@ dist/
 .env.local
 .env.*.local
 data/external/
+.DS_Store
+.wrangler/
+.playwright-mcp/

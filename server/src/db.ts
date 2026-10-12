@@ -1,12 +1,29 @@
-import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-
 /**
- * SQLite (node:sqlite 組み込み) を使用。スキーマは素直な SQL なので、
- * 本番で PostgreSQL に移す場合も型を合わせればそのまま移植できる。
+ * データベースの抽象。サービス層はこのインターフェースだけを使うので、
+ * Node.js（node:sqlite、db-node.ts）と Cloudflare Durable Objects の SQLite（db-do.ts）の両方で動く。
+ * スキーマは素直な SQL なので、PostgreSQL などに移す場合も型を合わせればそのまま移植できる。
  */
-export type DB = DatabaseSync;
+export type SqlValue = string | number | bigint | null | Uint8Array;
+
+export interface Statement {
+  get(...params: SqlValue[]): unknown;
+  all(...params: SqlValue[]): unknown[];
+  run(...params: SqlValue[]): { changes: number | bigint; lastInsertRowid: number | bigint };
+}
+
+export interface DB {
+  prepare(sql: string): Statement;
+  /** 複数文をまとめて実行（結果は返さない） */
+  exec(sql: string): void;
+  /** fn を 1 トランザクションで実行。例外なら巻き戻す */
+  transaction<T>(fn: () => T): T;
+  /**
+   * PRAGMA foreign_keys を切り替えられるか（テーブルを作り直すマイグレーション用）。
+   * Durable Objects では使えないが、マイグレーションは空の DB に対して流れるので問題ない
+   */
+  readonly canToggleForeignKeys: boolean;
+  close?(): void;
+}
 
 const MIGRATIONS: string[] = [
   `
@@ -127,7 +144,7 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (lesson_id, card_id)
   );
   `,
-  // v2: 単語の一意性を「所有者ごと」にする。ユーザー追加語（Cambly の訂正など）が
+  // v2: 単語の一意性を「所有者ごと」にする。ユーザー追加語（レッスンの訂正など）が
   // 共有語や他ユーザーの語と同じ (lemma, pos) でも衝突・上書きしないように。
   // SQLite はテーブル制約を変更できないので作り直す（外部キーは一時的に無効化）
   `
@@ -161,6 +178,19 @@ const MIGRATIONS: string[] = [
   ALTER TABLE words ADD COLUMN tags TEXT NOT NULL DEFAULT '';
   ALTER TABLE examples ADD COLUMN attribution TEXT;
   `,
+  // v5: 特定サービス名をやめた出どころの名前に揃える / AI 機能の 1 日あたりの利用回数（費用の上限）
+  // v4 の ALTER TABLE は列があると失敗するので、ここから先も「足すだけ」の変更にする
+  `
+  UPDATE cards SET source = 'capture' WHERE source = 'cambly';
+  UPDATE words SET source = 'capture' WHERE source = 'cambly';
+  UPDATE words SET source = 'capture-correction' WHERE source = 'cambly-correction';
+  CREATE TABLE IF NOT EXISTS llm_usage (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    local_date TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, local_date)
+  );
+  `,
 ];
 
 /** 最新のスキーマバージョン */
@@ -169,22 +199,14 @@ export const SCHEMA_VERSION = MIGRATIONS.length;
 /** テーブルを作り直すマイグレーション（外部キー無効化が必要なもの） */
 const REBUILD_MIGRATIONS = new Set([1]);
 
-export function openDb(path: string): DB {
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path);
-  db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-  migrate(db);
-  return db;
-}
-
-function migrate(db: DB) {
+export function migrate(db: DB) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)");
   const row = db.prepare("SELECT version FROM schema_version").get() as { version: number } | undefined;
   let version = row?.version ?? 0;
   if (!row) db.prepare("INSERT INTO schema_version (version) VALUES (0)").run();
   while (version < MIGRATIONS.length) {
     // PRAGMA foreign_keys はトランザクション外でしか切り替えられない
-    const rebuild = REBUILD_MIGRATIONS.has(version);
+    const rebuild = REBUILD_MIGRATIONS.has(version) && db.canToggleForeignKeys;
     if (rebuild) db.exec("PRAGMA foreign_keys = OFF");
     try {
       tx(db, () => {
@@ -203,13 +225,5 @@ function migrate(db: DB) {
 }
 
 export function tx<T>(db: DB, fn: () => T): T {
-  db.exec("BEGIN");
-  try {
-    const result = fn();
-    db.exec("COMMIT");
-    return result;
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  return db.transaction(fn);
 }

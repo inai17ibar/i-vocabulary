@@ -134,7 +134,7 @@
       ["Thank you for today's lesson.","neutral",null,null],
       ["That was really helpful.","neutral",null,null],
       ["I learned a lot today.","neutral",null,null],
-      ["Could you send me the notes?","neutral","Cambly のチャットで依頼",null],
+      ["Could you send me the notes?","neutral","オンラインレッスンのチャットで依頼",null],
       ["See you next time!","casual",null,null]]},
     {"intentJa":"訂正をお願いする","intentEn":"Asking for corrections","scene":"online lesson","cefr":"B1","expressions":[
       ["Please correct me if I'm wrong.","neutral",null,null],

@@ -19,6 +19,10 @@
     "seed": "npm run seed -w server",
     "import:words": "npm run import:words -w server --",
     "enrich": "npm run enrich -w server --",
-    "wordlists": "npm run wordlists -w server --"
+    "wordlists": "npm run wordlists -w server --",
+    "enrich:llm": "npm run enrich:llm -w server --",
+    "deploy": "npm run build -w web && npm run deploy -w server",
+    "deploy:data": "npm run deploy:data -w server --",
+    "dev:worker": "npm run build -w web && npm run dev:worker -w server"
   }
 }

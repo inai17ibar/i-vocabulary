@@ -123,8 +123,8 @@ export function buildSession(db: DB, user: User, task: TaskKey, opts: { limit?: 
   } else if (task === "new") {
     const wordsLeft = Math.max(0, level.plan.newWords - introducedToday(db, user, "word", now));
     const exprLeft = Math.max(0, level.plan.newExpressions - introducedToday(db, user, "expression", now));
-    // 導入済みで未学習（state=New）のカードも含める
-    const pending = db.prepare("SELECT * FROM cards WHERE user_id = ? AND state = 0 ORDER BY id LIMIT 50").all(user.id) as unknown as CardRow[];
+    // 導入済みで未学習（state=New）のカードも含める。自分で保存したフレーズ・取り込んだ語を先に
+    const pending = db.prepare("SELECT * FROM cards WHERE user_id = ? AND state = 0 ORDER BY source IN ('phrase', 'capture', 'manual') DESC, id LIMIT 50").all(user.id) as unknown as CardRow[];
     const fresh = [...introduceNewCards(db, user, "word", wordsLeft, now), ...introduceNewCards(db, user, "expression", exprLeft, now)];
     const seen = new Set<number>();
     for (const c of [...pending, ...fresh]) {
