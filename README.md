@@ -15,7 +15,7 @@ Web クライアント + API サーバー構成で、同じ API を将来の iOS
 | Cambly 連携 | レッスン前: 忘れかけの語から「今日使う語」リストを作り、チャットに貼る英文を生成 → レッスン後: 使えた語にチェックすると復習に反映 → チャットログを貼ると既知語・表現・**講師の訂正**・新出語候補を抽出してカード化 |
 | 発音 | 単語・例文・表現の読み上げ（米/英アクセント、ゆっくり再生、新出語の自動再生）、発音記号、**マイクで言ってみて音声認識で判定する発音チェック**、音声を聞いて単語を選ぶ**リスニング問題** |
 | モバイル | 下部タブバー・親指で押せる位置の回答ボタン・全画面の学習画面。ホーム画面に追加すればアプリのように起動（PWA） |
-| 単語供給 | 同梱の厳選データ + NGSL / CEFR-J / 独自 CSV の取り込み + Free Dictionary / Datamuse で自動補完（[詳細](docs/word-sources.md)） |
+| 単語供給 | 同梱の厳選データ 120 語 + `npm run wordlists` で CEFR-J・Octanove・NGSL 系・EJDict・Tatoeba から約 1 万語（訳・和訳つき例文つき） + Free Dictionary / Datamuse で自動補完（[詳細](docs/word-sources.md)） |
 
 ## 使い方
 
@@ -58,6 +58,7 @@ Web 版（同一オリジン配信）では切り替え UI は出ない（開発
 | `npm test` | shared / server / web のテスト（vitest） |
 | `npm run typecheck` | 全パッケージの型チェック |
 | `npm run seed` | 同梱データを DB に投入（初回起動時は自動） |
+| `npm run wordlists` | 公開語彙リスト（CEFR-J・NGSL ほか）から約 1 万語を取り込み（[出典とライセンス](docs/word-sources.md)） |
 | `npm run import:words -- --file x.csv --preset ngsl` | 単語リストの取り込み |
 | `npm run enrich -- --limit 200` | 外部辞書で定義・関係語を補完 |
 

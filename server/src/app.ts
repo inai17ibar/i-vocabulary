@@ -4,7 +4,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
 import { z, ZodError } from "zod";
 import type { User } from "@ivocab/shared";
-import { CEFR_LEVELS, LEVELS } from "@ivocab/shared";
+import { CEFR_LEVELS, DATA_SOURCES, DERIVED_DATA_NOTICE, LEVELS } from "@ivocab/shared";
 import type { DB } from "./db.ts";
 import { AuthError, login, logout, register, updateUser, userFromToken } from "./services/auth.ts";
 import { deleteCard, ensureCard, listCards, NotFoundError, recordReview, toCardDto } from "./services/cards.ts";
@@ -59,6 +59,7 @@ export async function buildApp(opts: AppOptions) {
     async (api) => {
       api.get("/health", async () => ({ ok: true }));
       api.get("/levels", async () => ({ levels: LEVELS, cefr: CEFR_LEVELS }));
+      api.get("/credits", async () => ({ sources: DATA_SOURCES, notice: DERIVED_DATA_NOTICE }));
 
       // ---- 認証 -------------------------------------------------------
       api.post("/auth/register", async (req) => {

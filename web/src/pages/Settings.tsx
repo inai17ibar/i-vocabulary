@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LevelDef, User } from "@ivocab/shared";
+import { DATA_SOURCES, DERIVED_DATA_NOTICE } from "@ivocab/shared";
 import { api } from "../api.ts";
 import { MicCheck } from "../components/Pronounce.tsx";
 import { ServerPicker } from "../components/ServerPicker.tsx";
@@ -85,6 +86,19 @@ export function Settings({ user, onChange, onLogout }: { user: User; onChange: (
         <p className="sub">{user.email} · タイムゾーン {user.timezone}</p>
         <button className="ghost" onClick={onLogout}>ログアウト</button>
       </div>
+      <details className="card credits">
+        <summary><h2 style={{ display: "inline" }}>データの出典とライセンス</h2></summary>
+        <p className="muted">英検・IELTS の公式教材や市販の単語帳は使っていません。レベルは CEFR を介して英検・IELTS に対応づけています。</p>
+        <ul>
+          {DATA_SOURCES.map((s) => (
+            <li key={s.id}>
+              <a href={s.url} target="_blank" rel="noreferrer">{s.name}</a> — {s.usage}
+              <div className="muted">{s.credit} · {s.licenseUrl ? <a href={s.licenseUrl} target="_blank" rel="noreferrer">{s.license}</a> : s.license}</div>
+            </li>
+          ))}
+        </ul>
+        <p className="muted">{DERIVED_DATA_NOTICE}</p>
+      </details>
       {saved && <p className="muted" role="status">{saved}</p>}
     </div>
   );

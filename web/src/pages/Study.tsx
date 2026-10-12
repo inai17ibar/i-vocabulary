@@ -33,7 +33,7 @@ function WordDetail({ w }: { w: Word }) {
       {w.examples.map((ex) => (
         <div className="example" key={ex.en} style={{ borderTop: "none" }}>
           <SpeakButtons text={ex.en} compact />
-          <div><div className="en">{ex.en}</div>{ex.ja && <div className="muted">{ex.ja}</div>}</div>
+          <div><div className="en">{ex.en}</div>{ex.ja && <div className="muted">{ex.ja}</div>}{ex.attribution && <div className="credit">{ex.attribution}</div>}</div>
         </div>
       ))}
       {w.synonyms.length > 0 && (

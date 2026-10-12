@@ -51,7 +51,12 @@ export interface Relation {
 export interface Example {
   en: string;
   ja: string | null;
+  /** 出典の表示（Tatoeba の例文 ID と作者など）。自作の例文は null */
+  attribution?: string | null;
 }
+
+/** 単語の目印。spoken = 会話頻出（NGSL-Spoken）、academic = 学術語（NAWL。IELTS 向け） */
+export type WordTag = "spoken" | "academic";
 
 export interface Word {
   id: number;
@@ -64,6 +69,7 @@ export interface Word {
   examples: Example[];
   synonyms: Relation[];
   antonyms: Relation[];
+  tags: WordTag[];
   source: string;
 }
 

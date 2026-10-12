@@ -1,4 +1,4 @@
-import type { Cefr, Example, ExpressionGroup, Register, Relation, Word } from "@ivocab/shared";
+import type { Cefr, Example, ExpressionGroup, Register, Relation, Word, WordTag } from "@ivocab/shared";
 import { isCefr } from "@ivocab/shared";
 import type { DB } from "../db.ts";
 import { tx } from "../db.ts";
@@ -11,6 +11,7 @@ interface WordRow {
   meaning_ja: string;
   definition_en: string | null;
   ipa: string | null;
+  tags: string;
   source: string;
 }
 
@@ -22,6 +23,8 @@ export interface WordInput {
   definitionEn?: string | null;
   ipa?: string | null;
   frequencyRank?: number | null;
+  /** 既存の目印に追加する */
+  tags?: WordTag[];
   examples?: Example[];
   synonyms?: { lemma: string; note?: string | null }[];
   antonyms?: { lemma: string; note?: string | null }[];
@@ -39,6 +42,9 @@ const POS_ALIASES: Record<string, string> = {
   pron: "pron", pronoun: "pron",
   det: "det", determiner: "det",
   phrase: "phrase", phr: "phrase",
+  interj: "interj", interjection: "interj",
+  num: "num", number: "num",
+  aux: "aux", "modal auxiliary": "aux", "be-verb": "aux", "do-verb": "aux", "have-verb": "aux",
 };
 
 export function normalizePos(pos: string | undefined | null): string {
@@ -66,11 +72,15 @@ export function upsertWord(db: DB, w: WordInput): number {
          frequency_rank = COALESCE(?, frequency_rank)
        WHERE id = ?`,
     ).run(w.meaningJa ?? "", w.meaningJa ?? "", w.definitionEn ?? null, w.ipa ?? null, w.frequencyRank ?? null, id);
+    if (w.tags?.length) {
+      const current = (db.prepare("SELECT tags FROM words WHERE id = ?").get(id) as { tags: string }).tags;
+      db.prepare("UPDATE words SET tags = ? WHERE id = ?").run(mergeTags(current, w.tags), id);
+    }
   } else {
     const r = db.prepare(
-      `INSERT INTO words (lemma, pos, cefr, meaning_ja, definition_en, ipa, frequency_rank, source, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(lemma, pos, w.cefr, w.meaningJa ?? "", w.definitionEn ?? null, w.ipa ?? null, w.frequencyRank ?? null, w.source, owner);
+      `INSERT INTO words (lemma, pos, cefr, meaning_ja, definition_en, ipa, frequency_rank, tags, source, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(lemma, pos, w.cefr, w.meaningJa ?? "", w.definitionEn ?? null, w.ipa ?? null, w.frequencyRank ?? null, mergeTags("", w.tags ?? []), w.source, owner);
     id = Number(r.lastInsertRowid);
   }
   for (const ex of w.examples ?? []) addExample(db, id, ex);
@@ -79,8 +89,16 @@ export function upsertWord(db: DB, w: WordInput): number {
   return id;
 }
 
+function mergeTags(current: string, add: readonly string[]): string {
+  return [...new Set([...current.split(",").filter(Boolean), ...add])].sort().join(",");
+}
+
+export function parseTags(tags: string): WordTag[] {
+  return tags.split(",").filter((t): t is WordTag => t === "spoken" || t === "academic");
+}
+
 export function addExample(db: DB, wordId: number, ex: Example) {
-  db.prepare("INSERT OR IGNORE INTO examples (word_id, sentence, translation_ja) VALUES (?, ?, ?)").run(wordId, ex.en, ex.ja ?? null);
+  db.prepare("INSERT OR IGNORE INTO examples (word_id, sentence, translation_ja, attribution) VALUES (?, ?, ?, ?)").run(wordId, ex.en, ex.ja ?? null, ex.attribution ?? null);
 }
 
 export function addRelation(db: DB, wordId: number, type: "synonym" | "antonym", lemma: string, note: string | null, source: string) {
@@ -124,12 +142,12 @@ export function canSeeWord(db: DB, id: number, userId: number): boolean {
 }
 
 export function getWord(db: DB, id: number): Word | null {
-  const row = db.prepare("SELECT id, lemma, pos, cefr, meaning_ja, definition_en, ipa, source FROM words WHERE id = ?").get(id) as WordRow | undefined;
+  const row = db.prepare("SELECT id, lemma, pos, cefr, meaning_ja, definition_en, ipa, tags, source FROM words WHERE id = ?").get(id) as WordRow | undefined;
   return row ? hydrateWord(db, row) : null;
 }
 
 function hydrateWord(db: DB, row: WordRow): Word {
-  const examples = db.prepare("SELECT sentence AS en, translation_ja AS ja FROM examples WHERE word_id = ? ORDER BY id").all(row.id) as unknown as Example[];
+  const examples = db.prepare("SELECT sentence AS en, translation_ja AS ja, attribution FROM examples WHERE word_id = ? ORDER BY id").all(row.id) as unknown as Example[];
   return {
     id: row.id,
     lemma: row.lemma,
@@ -138,9 +156,10 @@ function hydrateWord(db: DB, row: WordRow): Word {
     meaningJa: row.meaning_ja,
     definitionEn: row.definition_en,
     ipa: row.ipa,
-    examples: examples.map((e) => ({ en: e.en, ja: e.ja })),
+    examples: examples.map((e) => ({ en: e.en, ja: e.ja, attribution: e.attribution ?? null })),
     synonyms: relationsFor(db, row.id, "synonym"),
     antonyms: relationsFor(db, row.id, "antonym"),
+    tags: parseTags(row.tags ?? ""),
     source: row.source,
   };
 }
@@ -159,7 +178,7 @@ export function searchWords(db: DB, opts: { q?: string; cefr?: Cefr; userId?: nu
   const w = where.join(" AND ");
   const total = (db.prepare(`SELECT COUNT(*) AS n FROM words WHERE ${w}`).get(...params) as { n: number }).n;
   const rows = db.prepare(
-    `SELECT id, lemma, pos, cefr, meaning_ja, definition_en, ipa, source FROM words WHERE ${w}
+    `SELECT id, lemma, pos, cefr, meaning_ja, definition_en, ipa, tags, source FROM words WHERE ${w}
      ORDER BY CASE cefr WHEN 'A1' THEN 1 WHEN 'A2' THEN 2 WHEN 'B1' THEN 3 WHEN 'B2' THEN 4 WHEN 'C1' THEN 5 ELSE 6 END, lemma
      LIMIT ? OFFSET ?`,
   ).all(...params, opts.limit ?? 50, opts.offset ?? 0) as unknown as WordRow[];

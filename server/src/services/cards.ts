@@ -68,6 +68,8 @@ export function introduceNewCards(db: DB, user: User, itemType: ItemType, count:
   const level = getLevel(user.levelId);
   let ids: number[];
   if (itemType === "word") {
+    // 同じ CEFR 帯の中では、厳選データ → 試験に合った目印（英検は会話頻出・IELTS は学術語）→ 高頻度の順
+    const preferredTag = user.exam === "ielts" ? "academic" : "spoken";
     const placeholders = level.vocabBands.map(() => "?").join(",");
     ids = (
       db.prepare(
@@ -75,9 +77,11 @@ export function introduceNewCards(db: DB, user: User, itemType: ItemType, count:
          WHERE w.cefr IN (${placeholders}) AND (w.created_by IS NULL OR w.created_by = ?) AND w.meaning_ja <> ''
            AND NOT EXISTS (SELECT 1 FROM cards c WHERE c.user_id = ? AND c.item_type = 'word' AND c.item_id = w.id)
          ORDER BY CASE w.cefr WHEN 'A1' THEN 1 WHEN 'A2' THEN 2 WHEN 'B1' THEN 3 WHEN 'B2' THEN 4 WHEN 'C1' THEN 5 ELSE 6 END,
+                  w.source = 'seed' DESC,
+                  (',' || w.tags || ',') LIKE ? DESC,
                   COALESCE(w.frequency_rank, 1000000), w.id
          LIMIT ?`,
-      ).all(...level.vocabBands, user.id, user.id, count) as { id: number }[]
+      ).all(...level.vocabBands, user.id, user.id, `%,${preferredTag},%`, count) as { id: number }[]
     ).map((r) => r.id);
   } else {
     // 表現はレベル以下の CEFR から（会話の基本は全レベル共通で必要なため）

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openDb } from "../src/db.ts";
+import { openDb, SCHEMA_VERSION } from "../src/db.ts";
 import { applyEnrichment, cefrFromRank, datamuseProvider, enrichWords, freeDictionaryProvider, importRows, parseCsv } from "../src/services/importers.ts";
 import { type CardRow, forgettingCurve, gradeFromQuiz, retrievability } from "../src/services/srs.ts";
 import { inflections, makeCloze } from "../src/services/text.ts";
@@ -161,9 +161,11 @@ describe("migration v2", () => {
     upsertWord(v1, { lemma: "brave", pos: "adj", cefr: "B1", source: "t", examples: [{ en: "a brave act", ja: null }], synonyms: [{ lemma: "bold" }] });
     v1.close();
     const raw = new DatabaseSync(path);
-    expect((raw.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(3);
+    expect((raw.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(SCHEMA_VERSION);
     raw.exec("UPDATE schema_version SET version = 1");
     raw.exec("DROP INDEX words_lemma_pos_owner; DROP INDEX words_lemma");
+    // v3 以降で足したものも外して、本当に v1 の状態に戻す
+    raw.exec("DROP INDEX review_logs_user_time; DROP INDEX review_logs_card; ALTER TABLE examples DROP COLUMN attribution");
     raw.close();
     const db = openDb(path);
     const w = getWord(db, 1)!;

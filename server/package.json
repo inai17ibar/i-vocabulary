@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/cli/seed.ts",
     "import:words": "tsx src/cli/import-words.ts",
-    "enrich": "tsx src/cli/enrich.ts"
+    "enrich": "tsx src/cli/enrich.ts",
+    "wordlists": "tsx src/cli/wordlists.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

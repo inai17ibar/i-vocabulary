@@ -18,6 +18,7 @@
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web",
     "seed": "npm run seed -w server",
     "import:words": "npm run import:words -w server --",
-    "enrich": "npm run enrich -w server --"
+    "enrich": "npm run enrich -w server --",
+    "wordlists": "npm run wordlists -w server --"
   }
 }

@@ -54,6 +54,8 @@ export function Words() {
                     <div className="row" style={{ gap: 6 }}>
                       <span className="lemma">{w.lemma}</span>
                       <span className="tag">{w.cefr}</span>
+                      {w.tags.includes("spoken") && <span className="tag tag-spoken">会話</span>}
+                      {w.tags.includes("academic") && <span className="tag tag-academic">アカデミック</span>}
                     </div>
                     <div className="muted">{w.ipa ? `${w.ipa} · ` : ""}{w.pos}</div>
                   </div>
@@ -67,7 +69,7 @@ export function Words() {
                     {w.examples.map((ex) => (
                       <div className="example" key={ex.en}>
                         <SpeakButtons text={ex.en} compact />
-                        <div><div className="en">{ex.en}</div>{ex.ja && <div className="muted">{ex.ja}</div>}</div>
+                        <div><div className="en">{ex.en}</div>{ex.ja && <div className="muted">{ex.ja}</div>}{ex.attribution && <div className="credit">{ex.attribution}</div>}</div>
                       </div>
                     ))}
                     {w.synonyms.some((s) => s.note) && (

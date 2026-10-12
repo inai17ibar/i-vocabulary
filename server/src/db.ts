@@ -156,7 +156,15 @@ const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS review_logs_user_time ON review_logs(user_id, reviewed_at, id);
   CREATE INDEX IF NOT EXISTS review_logs_card ON review_logs(card_id, reviewed_at);
   `,
+  // v4: 公開語彙リストの取り込み。単語の目印（spoken / academic、カンマ区切り）と例文の出典表示
+  `
+  ALTER TABLE words ADD COLUMN tags TEXT NOT NULL DEFAULT '';
+  ALTER TABLE examples ADD COLUMN attribution TEXT;
+  `,
 ];
+
+/** 最新のスキーマバージョン */
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** テーブルを作り直すマイグレーション（外部キー無効化が必要なもの） */
 const REBUILD_MIGRATIONS = new Set([1]);
