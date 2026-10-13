@@ -18,7 +18,7 @@ export const DATA_SOURCES: DataSource[] = [
   {
     id: "seed",
     name: "i-vocabulary 同梱データ",
-    usage: "厳選した会話頻出語・表現（訳・ニュアンス注記・例文つき）",
+    usage: "厳選した会話頻出語・表現と独自の訳・例文補正（CC0）",
     credit: "i-vocabulary",
     license: "CC0 1.0",
     licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
@@ -91,4 +91,4 @@ export const DATA_SOURCES: DataSource[] = [
 
 /** CC BY-SA のデータを加工したもの（取り込んだ単語データ一式）の扱い */
 export const DERIVED_DATA_NOTICE =
-  "取り込んだ単語データ（レベル・頻度・目印）は CC BY-SA 4.0 のデータを含むため、データを再配布する場合は CC BY-SA 4.0 で提供し、上記の出典を表示します。アプリのプログラム自体には影響しません。";
+  "公開データには品詞の正規化、リストの合成、訳語・例文の選択、独自の補正を加えています。取り込んだ単語データ（レベル・頻度・目印）は CC BY-SA 4.0 のデータを含むため、データを再配布する場合は CC BY-SA 4.0 で提供し、上記の出典を表示します。アプリのプログラム自体には影響しません。";

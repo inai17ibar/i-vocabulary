@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { User } from "@ivocab/shared";
 import { introduceNewCards } from "../src/services/cards.ts";
 import { ExampleIndex, importOpenWordlist, mergeWordlists, parseEjdict, pickMeaningJa, usageScore } from "../src/services/open-wordlists.ts";
-import { getWord } from "../src/services/vocab.ts";
+import { auditWordlists } from "../src/services/wordlist-audit.ts";
+import { upsertWord, getWord } from "../src/services/vocab.ts";
 import { setup } from "./helpers.ts";
 
 const EJDICT = [
@@ -131,5 +132,61 @@ describe("new card order", () => {
     add2("thesis", 800, "academic");
     const ielts = { ...reg.user, levelId: "ielts-4.0", exam: "ielts" } as User;
     expect(introduceNewCards(reg.db, ielts, "word", 3).map((c) => (reg.db.prepare("SELECT lemma FROM words WHERE id = ?").get(c.item_id) as { lemma: string }).lemma)).toEqual(["thesis", "common", "chat"]);
+  });
+});
+
+
+describe("wordlist quality regressions", () => {
+  it("rejects invalid ranks instead of prioritizing them as common vocabulary", () => {
+    const words = mergeWordlists({ cefrj: CEFRJ, octanove: OVP, ngsl: "Lemma,SFI Rank\nrun,0\nhesitate,-1\nlight,1.5\n", ngslSpoken: NGSL_S, nawl: NAWL });
+    expect(words.filter((w) => w.frequencyRank !== null)).toEqual([]);
+  });
+  it("rejects uncredited examples, cross-POS uses, and derived adverbs", () => {
+    const idx = ExampleIndex.fromManythings([
+      "I run every morning before work.\t毎朝走る。\t",
+      "I run every morning before work.\t毎朝走る。\tCC-BY 2.0 (France) Attribution: tatoeba.org #3 (CK) & #4 (x)",
+      "We want to light a candle tonight.\t今夜ろうそくを灯したい。\tCC-BY 2.0 (France) Attribution: tatoeba.org #5 (CK) & #6 (x)",
+      "She finished the work very quickly today.\t今日は素早く仕事を終えた。\tCC-BY 2.0 (France) Attribution: tatoeba.org #7 (CK) & #8 (x)",
+    ].join("\n"));
+    expect(idx.find("run", "verb")).toHaveLength(1);
+    expect(idx.find("light", "noun")).toEqual([]);
+    expect(idx.find("quick", "adj")).toEqual([]);
+    expect(idx.find("quickly", "adv")).toHaveLength(1);
+  });
+  it("preserves curated CEFR, definitions, examples, and private words across repeated imports", async () => {
+    const { db, user } = await setup();
+    const id = upsertWord(db, { lemma: "qualitytest", pos: "noun", cefr: "B2", meaningJa: "手修正", definitionEn: "curated definition", examples: [{ en: "My curated example stays here.", ja: "手修正例" }], source: "custom" });
+    const privateId = upsertWord(db, { lemma: "qualitytest", pos: "noun", cefr: "C1", meaningJa: "私の訳", frequencyRank: 999, source: "cambly", createdBy: user.id });
+    const before = getWord(db, privateId);
+    const words = [{ lemma: "qualitytest", pos: "noun", cefr: "A1" as const, frequencyRank: 10, tags: ["spoken" as const], source: "cefr-j" as const }];
+    importOpenWordlist(db, words, new Map([["qualitytest", "機械訳"]]), ExampleIndex.fromManythings(PAIRS));
+    expect(importOpenWordlist(db, words, new Map(), null).added).toBe(0);
+    expect(getWord(db, id)).toMatchObject({ cefr: "B2", meaningJa: "手修正", definitionEn: "curated definition", source: "custom", examples: [{ en: "My curated example stays here.", ja: "手修正例" }] });
+    expect(getWord(db, privateId)).toEqual(before);
+    const audit = auditWordlists(db);
+    expect(audit.total).toMatchObject({ words: 121, withMeaning: 121 });
+    expect(audit.duplicates).toEqual([]);
+    expect(audit.invalidRanks).toEqual([]);
+  });
+});
+
+
+describe("dictionary case collisions and reviewed corrections", () => {
+  it("uses common lower-case words instead of abbreviations and preserves exact entries", () => {
+    const dict = parseEjdict("IN\tIndiana\nin\t中に\nCan\tCanada\ncan\t缶\nIT\t情報技術\nit\tそれ\ncolour,color\t色");
+    expect(dict.get("in")).toBe("中に");
+    expect(dict.get("can")).toBe("缶");
+    expect(dict.get("IT")).toBe("情報技術");
+    expect(dict.get("color")).toBe("色");
+  });
+  it("fills important missing words without overwriting an existing correction", async () => {
+    const { db } = await setup();
+    const words = [{ lemma: "sustainable", pos: "adj", cefr: "C1" as const, frequencyRank: null, tags: ["academic" as const], source: "nawl" as const }];
+    importOpenWordlist(db, words, new Map(), null);
+    const row = db.prepare("SELECT id FROM words WHERE lemma = 'sustainable'").get() as { id: number };
+    expect(getWord(db, row.id)).toMatchObject({ meaningJa: "持続可能な", examples: [{ en: "Cities need sustainable transport options that people can afford." }] });
+    db.prepare("UPDATE words SET meaning_ja = '人の修正' WHERE id = ?").run(row.id);
+    importOpenWordlist(db, words, new Map(), null);
+    expect(getWord(db, row.id)!.meaningJa).toBe("人の修正");
   });
 });

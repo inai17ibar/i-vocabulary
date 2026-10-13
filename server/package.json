@@ -15,7 +15,8 @@
     "enrich:llm": "tsx src/cli/enrich-llm.ts",
     "dev:worker": "wrangler dev",
     "deploy": "wrangler deploy",
-    "deploy:data": "tsx src/cli/deploy-data.ts"
+    "deploy:data": "tsx src/cli/deploy-data.ts",
+    "audit:wordlists": "tsx src/cli/audit-wordlists.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261012.1",

@@ -6,8 +6,9 @@
  *
  * ダウンロードしたファイルは data/external/（git 管理外）に置く。データ本体はリポジトリに含めない。
  */
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { DATA_SOURCES } from "@ivocab/shared";
@@ -22,6 +23,7 @@ const { values } = parseArgs({
     dir: { type: "string", default: resolve(DATA_DIR, "external") },
     refresh: { type: "boolean", default: false },
     "skip-fetch": { type: "boolean", default: false },
+    "apply-generated": { type: "boolean", default: false },
     "no-examples": { type: "boolean", default: false },
   },
 });
@@ -41,21 +43,24 @@ const FILES: { source: string; file: string; url: string }[] = [
 ];
 
 async function download(url: string, dest: string) {
-  const res = await fetch(url, { headers: { "user-agent": "i-vocabulary wordlist importer" } });
+  const res = await fetch(url, { signal: AbortSignal.timeout(60_000), headers: { "user-agent": "i-vocabulary wordlist importer" } });
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-  writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (!bytes.length || /^\s*<(?:!doctype|html)/i.test(bytes.toString("utf8", 0, 200))) throw new Error(`${url}: invalid data response`);
+  writeFileSync(`${dest}.tmp`, bytes);
+  renameSync(`${dest}.tmp`, dest);
 }
 
 if (!values["skip-fetch"]) {
   mkdirSync(resolve(dir, "ejdict"), { recursive: true });
-  for (const f of FILES) {
+  for (const f of FILES.filter((f) => !values["no-examples"] || f.source !== "tatoeba")) {
     const dest = resolve(dir, f.file);
     if (existsSync(dest) && !values.refresh) continue;
     process.stdout.write(`download ${f.file} … `);
     await download(f.url, dest);
     console.log("ok");
   }
-  if (!existsSync(resolve(dir, "tatoeba/jpn.txt")) || values.refresh) {
+  if (!values["no-examples"] && (!existsSync(resolve(dir, "tatoeba/jpn.txt")) || values.refresh)) {
     mkdirSync(resolve(dir, "tatoeba"), { recursive: true });
     try {
       execFileSync("unzip", ["-oq", resolve(dir, "jpn-eng.zip"), "-d", resolve(dir, "tatoeba")]);
@@ -65,12 +70,12 @@ if (!values["skip-fetch"]) {
   }
   // 取得元・日時・ライセンスの控え（再配布時の出典表示に使う）
   const manifest = [
-    `retrieved: ${new Date().toISOString()}`,
+    `manifested: ${new Date().toISOString()} (includes cached files; not a download timestamp)`,
     "",
     ...DATA_SOURCES.filter((s) => s.id !== "seed").map((s) => `- ${s.name} — ${s.credit} — ${s.license}${s.licenseUrl ? ` (${s.licenseUrl})` : ""} — ${s.url}`),
     "",
     "files:",
-    ...FILES.map((f) => `  ${f.file} <- ${f.url}`),
+    ...FILES.filter((f) => existsSync(resolve(dir, f.file))).map((f) => `  ${f.file} <- ${f.url} sha256=${createHash("sha256").update(readFileSync(resolve(dir, f.file))).digest("hex")}`),
   ].join("\n");
   writeFileSync(resolve(dir, "SOURCES.txt"), manifest + "\n");
 }
@@ -83,8 +88,11 @@ const words = mergeWordlists({
   ngslSpoken: read("NGSL-Spoken_12_stats.csv"),
   nawl: read("NAWL_12_lemmatized_for_teaching.csv"),
 });
+if (!words.length) throw new Error("No vocabulary parsed; refusing to update the database");
 const dict = parseEjdict(readdirSync(resolve(dir, "ejdict")).sort().map((f) => read(`ejdict/${f}`)).join("\n"));
+if (!dict.size) throw new Error("Empty Japanese dictionary; refusing to update the database");
 const examples = values["no-examples"] ? null : ExampleIndex.fromManythings(read("tatoeba/jpn.txt"));
+if (examples && !examples.size) throw new Error("No credited sentence pairs parsed; refusing to update the database");
 
 const db = openDb(config.dbPath);
 const r = importOpenWordlist(db, words, dict, examples);
@@ -97,7 +105,9 @@ console.log("日本語訳のない語は新出カードとして出題されま�
 
 // Claude で生成して記録済みの訳・例文・関係語があれば反映する（API は呼ばない）
 const generated = resolve(DATA_DIR, "generated/llm-words.jsonl");
-if (existsSync(generated)) {
+if (values["apply-generated"] && existsSync(generated)) {
   const g = applyGenerated(db, parseGeneratedFile(readFileSync(generated, "utf8")));
   console.log(`記録済みの AI 生成データを反映: ${g.applied} 語`);
 }
+
+db.close?.();

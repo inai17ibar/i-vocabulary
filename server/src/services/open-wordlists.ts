@@ -3,6 +3,7 @@ import { isCefr } from "@ivocab/shared";
 import type { DB } from "../db.ts";
 import { tx } from "../db.ts";
 import { cefrFromRank, parseCsv } from "./importers.ts";
+import { REVIEWED_VOCABULARY } from "./reviewed-vocabulary.ts";
 import { inflections } from "./text.ts";
 import { normalizePos, upsertWord } from "./vocab.ts";
 
@@ -46,7 +47,7 @@ export function mergeWordlists(files: OpenWordlistFiles): OpenWord[] {
   const ngslRank = new Map<string, number>();
   for (const r of parseCsv(files.ngsl)) {
     const rank = Number(r["sfi rank"] ?? r.rank);
-    if (r.lemma && Number.isFinite(rank)) ngslRank.set(r.lemma.toLowerCase(), rank);
+    if (r.lemma && Number.isInteger(rank) && rank > 0) ngslRank.set(r.lemma.toLowerCase(), rank);
   }
   const spoken = new Set(parseCsv(files.ngslSpoken).map((r) => r.lemma?.toLowerCase()).filter(Boolean));
   // NAWL の教育用リストはヘッダーなしで「見出し語,活用形…」
@@ -102,9 +103,14 @@ export function parseEjdict(text: string): Map<string, string> {
     if (tab <= 0) continue;
     const meaning = line.slice(tab + 1).trim();
     for (const head of line.slice(0, tab).split(",")) {
-      const k = head.trim().toLowerCase();
+      const k = head.trim();
       if (k && !dict.has(k)) dict.set(k, meaning);
     }
+  }
+  // Prefer the genuine lower-case headword over abbreviations (IN, OF, Can, ...).
+  for (const [key, meaning] of [...dict]) {
+    const lower = key.toLowerCase();
+    if (!dict.has(lower)) dict.set(lower, meaning);
   }
   return dict;
 }
@@ -208,8 +214,9 @@ export class ExampleIndex {
     for (const line of text.split(/\r?\n/)) {
       const [en, ja, license] = line.split("\t");
       if (!en || !ja || seen.has(en)) continue;
-      seen.add(en);
       const m = license?.match(/tatoeba\.org (#\d+ \([^)]*\)(?: & #\d+ \([^)]*\))?)/);
+      if (!m || !license?.startsWith("CC-BY 2.0 (France) Attribution:")) continue;
+      seen.add(en);
       const tokens = en.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
       const i = idx.pairs.push({ en, ja, attribution: `Tatoeba ${m ? m[1] : ""}`.trim(), words: tokens.length }) - 1;
       for (const t of new Set(tokens)) {
@@ -232,19 +239,31 @@ export class ExampleIndex {
       ids = (this.byToken.get(l.split(" ")[0]) ?? []).filter((i) => re.test(this.pairs[i].en.toLowerCase()));
     } else {
       // -ly / -er / -est は別の語になりやすい（friend → friendly）ので形容詞・副詞以外では使わない
-      const forms = inflections(l).filter((f) => pos === "adj" || pos === "adv" || !/(ly|er|est)$/.test(f) || f === l);
+      const forms = exampleForms(l, pos);
       ids = [...new Set(forms.flatMap((f) => this.byToken.get(f) ?? []))];
     }
     const score = (i: number) => usageScore(this.pairs[i].en, l, pos);
     return ids
       .filter((i) => this.pairs[i].words >= 4 && this.pairs[i].words <= 14)
       .map((i) => ({ i, s: score(i) }))
+      .filter(({ s }) => s >= 0)
       // 品詞に合った使われ方の文を優先し、同点なら 8 語前後の文
       .sort((a, b) => b.s - a.s || Math.abs(this.pairs[a.i].words - 8) - Math.abs(this.pairs[b.i].words - 8) || a.i - b.i)
       .slice(0, limit)
       .map(({ i }) => i)
       .map((i) => ({ en: this.pairs[i].en, ja: this.pairs[i].ja, attribution: this.pairs[i].attribution }));
   }
+}
+
+/** Avoid derivations (quick → quickly) and cross-POS forms in learning examples. */
+function exampleForms(lemma: string, pos: string): string[] {
+  if (pos === "adv" || !["noun", "verb", "adj"].includes(pos)) return [lemma];
+  return inflections(lemma).filter((f) => {
+    if (f === lemma) return true;
+    if (pos === "noun") return /s$/.test(f);
+    if (pos === "adj") return /(er|est)$/.test(f) || ["better", "best", "worse", "worst", "farther", "further"].includes(f);
+    return !/(ly|er|est)$/.test(f);
+  });
 }
 
 const DETERMINERS = /\b(a|an|the|my|your|his|her|its|our|their|this|that|these|those|some|any|no|every)\s+$/;
@@ -258,7 +277,7 @@ const ADJ_LEAD = /\b(is|are|was|were|be|been|very|so|too|quite|really|more|most|
 export function usageScore(sentence: string, lemma: string, pos: string): number {
   const s = sentence.toLowerCase();
   if (lemma.includes(" ")) return 0;
-  const m = new RegExp(`\\b(${inflections(lemma).map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`).exec(s);
+  const m = new RegExp(`\\b(${exampleForms(lemma, pos).map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`).exec(s);
   if (!m) return 0;
   const before = s.slice(0, m.index);
   const form = m[1];
@@ -294,11 +313,14 @@ export function importOpenWordlist(db: DB, words: OpenWord[], dict: Map<string, 
   const findExisting = db.prepare("SELECT id, meaning_ja, (SELECT COUNT(*) FROM examples e WHERE e.word_id = words.id) AS n FROM words WHERE lemma = ? AND pos = ? AND created_by IS NULL");
   tx(db, () => {
     for (const w of words) {
-      const raw = dict.get(w.lemma.toLowerCase()) ?? "";
+      const raw = dict.get(w.lemma) ?? (/^[A-Z]{2,}$/.test(w.lemma) ? "" : dict.get(w.lemma.toLowerCase()) ?? "");
       const pos = w.pos || (raw ? guessPos(raw) : "noun");
       const existing = findExisting.get(w.lemma, pos) as { id: number; meaning_ja: string; n: number } | undefined;
-      const meaningJa = existing?.meaning_ja ? undefined : raw ? pickMeaningJa(raw, pos) : "";
-      const exs = (existing?.n ?? 0) > 0 || !examples ? [] : examples.find(w.lemma, pos);
+      const reviewed = REVIEWED_VOCABULARY[`${w.lemma}|${pos}`];
+      const meaningJa = existing?.meaning_ja ? undefined : reviewed?.meaning ?? (raw ? pickMeaningJa(raw, pos) : "");
+      const exs = (existing?.n ?? 0) > 0 ? [] : reviewed
+        ? [{ en: reviewed.en, ja: reviewed.ja }]
+        : examples?.find(w.lemma, pos) ?? [];
       upsertWord(db, { lemma: w.lemma, pos, cefr: w.cefr, meaningJa, frequencyRank: w.frequencyRank, tags: w.tags, examples: exs, source: w.source });
       result.words++;
       if (!existing) result.added++;

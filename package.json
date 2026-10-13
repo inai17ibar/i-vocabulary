@@ -23,6 +23,7 @@
     "enrich:llm": "npm run enrich:llm -w server --",
     "deploy": "npm run build -w web && npm run deploy -w server",
     "deploy:data": "npm run deploy:data -w server --",
-    "dev:worker": "npm run build -w web && npm run dev:worker -w server"
+    "dev:worker": "npm run build -w web && npm run dev:worker -w server",
+    "audit:wordlists": "npm run audit:wordlists -w server --"
   }
 }

@@ -14,6 +14,7 @@
 npm run wordlists                 # ダウンロード（data/external/、git 管理外）→ 合成 → DB へ取り込み
 npm run wordlists -- --refresh    # 取り直す
 npm run wordlists -- --skip-fetch # 手元のファイルで取り込み直す
+npm run audit:wordlists -- --database /absolute/path/ivocab.db # 読み取り専用の品質監査
 ```
 
 **英検・IELTS の公式問題集・公式単語帳・市販の単語帳は著作物なので使わない。**
@@ -35,13 +36,15 @@ npm run wordlists -- --skip-fetch # 手元のファイルで取り込み直す
 - CEFR-J / Octanove にない NGSL の語は順位から CEFR を推定、NAWL だけの語は C1。品詞は日本語訳の語尾から推定。
 - 日本語訳は EJDict の訳語から、品詞に合いそうなもの（語尾で推定）を『』の主要訳から 3 つまで。機械的な選択なので完璧ではない。
 - 例文は見出し語（活用形を含む）を含む 4〜14 語の文から、品詞に合った使われ方（to + 動詞、the + 名詞 など）を優先して 2 つ。
+- 独自CC0の補正（`server/src/services/reviewed-vocabulary.ts`）で重要語24項目の訳・例文を補完する。
 - 既存の語（同梱の厳選データ、ユーザー追加語）の訳・例文・レベルは上書きしない。目印と頻度順位だけ足す。
 - 新出カードは同じ CEFR 帯の中で「厳選データ → 試験に合った目印（英検: spoken、IELTS: academic）→ 頻度順」に導入する。
 
-結果（2026-10 時点）: 10,019 語（A1 1,033 / A2 1,372 / B1 2,435 / B2 2,814 / C1 1,432 / C2 933）、日本語訳あり 93%、例文あり 63%。
+検証環境の結果（2026-10-13）: 合成リスト10,019項目、シードを含むDBは10,026カード（8,965見出し語）。日本語訳あり92.9%、和訳つき例文あり61.6%。本番への投入件数とは異なる。[CEFR分布・品質監査・学習用途の評価](wordlist-quality-audit.md)を参照。
 
 **出典表示**: アプリの「設定 › データの出典とライセンス」と `GET /api/v1/credits` に表示（定義は `shared/src/sources.ts`）。
-取り込み時に `data/external/SOURCES.txt` へ取得日時と URL を控える。
+取り込み時に `data/external/SOURCES.txt` へ記録日時・URL・ファイルのSHA-256を控える。キャッシュ利用時の記録日時は取得日時ではない。
+生成済みLLMデータは既定では適用せず、必要な場合だけ `npm run wordlists -- --apply-generated` で適用する（既存の共有語の訳を書き換えるため、事前に確認する）。
 CC BY-SA のデータを含むため、取り込んだ単語データを**再配布する場合は CC BY-SA 4.0 で提供**する（アプリのコードには影響しない）。
 データ本体はリポジトリに含めず、各環境でこのスクリプトを実行して作る。
 
