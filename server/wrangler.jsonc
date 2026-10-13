@@ -1,0 +1,19 @@
+{
+  // Cloudflare Workers へのデプロイ設定（npm run deploy）。docs/deploy.md
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "i-vocabulary",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Web クライアント（vite build の出力）。/api/* だけ Worker を先に通し、それ以外の未知のパスは index.html を返す
+  "assets": {
+    "directory": "../web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "APP", "class_name": "AppDurableObject" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AppDurableObject"] }],
+  "observability": { "enabled": true }
+}

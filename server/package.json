@@ -1,0 +1,36 @@
+{
+  "name": "@ivocab/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
+    "seed": "tsx src/cli/seed.ts",
+    "import:words": "tsx src/cli/import-words.ts",
+    "enrich": "tsx src/cli/enrich.ts",
+    "wordlists": "tsx src/cli/wordlists.ts",
+    "enrich:llm": "tsx src/cli/enrich-llm.ts",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:data": "tsx src/cli/deploy-data.ts",
+    "audit:wordlists": "tsx src/cli/audit-wordlists.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261012.1",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.149.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "@hono/node-server": "^2.1.4",
+    "hono": "^4.13.13",
+    "ts-fsrs": "^5.4.2",
+    "zod": "^4.6.5"
+  }
+}
